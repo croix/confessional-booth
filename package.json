@@ -1,0 +1,19 @@
+{
+  "name": "confessional-booth",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Unattended wedding confessional booth controller (OBS + Companion + Stream Deck).",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "jpeg-js": "^0.4.4",
+    "obs-websocket-js": "^5.0.6"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

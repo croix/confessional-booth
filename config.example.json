@@ -1,0 +1,52 @@
+{
+  "obs": {
+    "url": "ws://127.0.0.1:4455",
+    "password": "PUT-YOUR-OBS-WEBSOCKET-PASSWORD-HERE"
+  },
+  "companion": {
+    "baseUrl": "http://127.0.0.1:8000"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 3939
+  },
+  "recordings": {
+    "approvedSubdir": "approved"
+  },
+  "scenes": {
+    "ready": "READY",
+    "attract": "ATTRACT",
+    "countdown": "COUNTDOWN",
+    "recording": "RECORDING",
+    "review": "REVIEW",
+    "thanks": "THANKS"
+  },
+  "sources": {
+    "camera": "Camera",
+    "countdownText": "txt_countdown",
+    "promptText": "txt_prompt",
+    "reviewMedia": "mediaReview"
+  },
+  "timings": {
+    "countdownSeconds": 3,
+    "maxRecordSeconds": 240,
+    "reviewTimeoutSeconds": 90,
+    "thanksSeconds": 4,
+    "attractAfterSeconds": 120
+  },
+  "prompts": [
+    "How did you meet the happy couple?",
+    "What's your favorite memory with them?",
+    "What advice would you give them for a happy marriage?"
+  ],
+  "watchdog": {
+    "intervalSeconds": 10,
+    "blackThreshold": 12,
+    "blackStrikes": 3
+  },
+  "notify": {
+    "url": "",
+    "title": "Confessional Booth",
+    "cooldownSeconds": 120
+  }
+}
