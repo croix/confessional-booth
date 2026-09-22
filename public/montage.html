@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Confessions</title>
+<style>
+  :root { --bg:#12100e; --panel:#1b1813; --ink:#f7f2e9; --muted:#c9bda8; --gold:#c9a961; --accent:#7c6a52;
+          --heading:'Cormorant Garamond', Georgia, serif; --body:'Montserrat', system-ui, sans-serif; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; overflow:hidden; background:#000; color:var(--ink); font-family:var(--body); cursor:none; }
+  #stage { position:fixed; inset:0; background:#000; }
+  .layer { position:absolute; inset:0; opacity:0; transition:opacity .5s ease; }
+  #photoBackdrop { filter:blur(34px) brightness(.5); transform:scale(1.15); }
+  #photoBackdrop img, #videoBackdropShade { width:100%; height:100%; object-fit:cover; }
+  #videoLayer video, #photoLayer img { width:100%; height:100%; object-fit:contain; }
+  /* Ken Burns drift on photos */
+  #photoLayer.kb img { animation:kb 14s ease-out forwards; }
+  @keyframes kb { from { transform:scale(1.02) translate(0,0); } to { transform:scale(1.12) translate(-1.5%,-1%); } }
+
+  /* black transition veil */
+  #veil { position:absolute; inset:0; background:#000; opacity:1; transition:opacity .45s ease; pointer-events:none; }
+
+  /* persistent brand mark, lower-left */
+  #brand { position:absolute; left:44px; bottom:38px; display:flex; align-items:center; gap:16px;
+           opacity:.9; text-shadow:0 2px 18px rgba(0,0,0,.85); }
+  #brand .crest { width:64px; height:64px; }
+  #brand .crest .fill { width:100%; height:100%; background:var(--gold);
+    -webkit-mask:var(--m) center/contain no-repeat; mask:var(--m) center/contain no-repeat; }
+  #brand .names { font-family:var(--heading); font-size:34px; font-weight:500; letter-spacing:.01em; line-height:1; }
+  #brand .tag { font-size:14px; letter-spacing:.32em; text-transform:uppercase; color:var(--gold); margin-top:5px; }
+
+  /* standby card when there's no media yet */
+  #standby { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center;
+             gap:22px; background:radial-gradient(120% 90% at 50% 40%, #221d16 0%, #0d0b09 78%); text-align:center; }
+  #standby.show { display:flex; }
+  #standby .crest { width:150px; height:150px; }
+  #standby .crest .fill { width:100%; height:100%; background:var(--gold);
+    -webkit-mask:var(--m) center/contain no-repeat; mask:var(--m) center/contain no-repeat; }
+  #standby .k { font-size:15px; letter-spacing:.36em; text-transform:uppercase; color:var(--gold); }
+  #standby .n { font-family:var(--heading); font-size:64px; font-weight:500; }
+  #standby .m { color:var(--muted); font-size:19px; letter-spacing:.05em; max-width:640px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="layer" id="photoBackdrop"><img id="backdropImg" alt="" /></div>
+  <div class="layer" id="videoLayer"><video id="vid" playsinline preload="auto"></video></div>
+  <div class="layer kb" id="photoLayer"><img id="pic" alt="" /></div>
+  <div id="veil"></div>
+  <div id="standby">
+    <div class="crest"><div class="fill" id="sbCrest"></div></div>
+    <div class="k" id="sbKicker">The Confessional</div>
+    <div class="n" id="sbNames">&nbsp;</div>
+    <div class="m" id="sbMsg">Guest confessions will appear here soon.</div>
+  </div>
+  <div id="brand">
+    <div class="crest"><div class="fill" id="brCrest"></div></div>
+    <div>
+      <div class="names" id="brNames">&nbsp;</div>
+      <div class="tag" id="brTag"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const vid = $('#vid'), pic = $('#pic'), backdrop = $('#backdropImg');
+  const veil = $('#veil'), photoLayer = $('#photoLayer'), videoLayer = $('#videoLayer'), photoBackdrop = $('#photoBackdrop');
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  let data = { settings:{}, branding:{}, videos:[], photos:[] };
+  let vQueue = [], pQueue = [], phase = 'video', photosLeft = 0;
+  let loadedFont = '';
+
+  function fade(to) { veil.style.opacity = to; return wait(470); }
+
+  function once(el, events, timeout) {
+    return new Promise((res) => {
+      let done = false;
+      const fin = (ev) => { if (done) return; done = true; clean(); res(ev && ev.type); };
+      const clean = () => { events.forEach((e) => el.removeEventListener(e, fin)); if (t) clearTimeout(t); };
+      events.forEach((e) => el.addEventListener(e, fin));
+      const t = timeout ? setTimeout(() => fin({ type: 'timeout' }), timeout) : null;
+    });
+  }
+
+  function applyBranding(b, crestV) {
+    if (!b) return;
+    const p = b.palette || {};
+    const root = document.documentElement.style;
+    for (const k of ['bg','panel','ink','muted','gold','accent']) if (p[k]) root.setProperty('--' + k, p[k]);
+    const fontKey = (b.headingFont || '') + '|' + (b.bodyFont || '');
+    if (fontKey !== loadedFont) {
+      loadedFont = fontKey;
+      const fams = [b.headingFont, b.bodyFont].filter(Boolean).map((f) => 'family=' + encodeURIComponent(f) + ':wght@400;500;600');
+      if (fams.length) { const l = document.createElement('link'); l.rel='stylesheet'; l.href='https://fonts.googleapis.com/css2?' + fams.join('&') + '&display=swap'; document.head.appendChild(l); }
+      if (b.headingFont) root.setProperty('--heading', `'${b.headingFont}', Georgia, serif`);
+      if (b.bodyFont) root.setProperty('--body', `'${b.bodyFont}', system-ui, sans-serif`);
+    }
+    const m = `url(/display/crest.svg?v=${crestV || 0})`;
+    for (const id of ['brCrest','sbCrest']) $('#'+id).parentElement.style.setProperty('--m', m);
+    $('#brNames').textContent = b.coupleNames || '';
+    $('#sbNames').textContent = b.coupleNames || '';
+    $('#brTag').textContent = b.hashtag || '';
+    $('#sbKicker').textContent = b.readyKicker || 'The Confessional';
+  }
+
+  async function refresh() {
+    try {
+      const r = await fetch('/api/montage', { cache: 'no-store' });
+      const j = await r.json();
+      data.settings = j.settings || {};
+      data.branding = j.branding || {};
+      data.videos = j.videos || [];
+      data.photos = (j.photos || []).map((p) => p.url);
+      applyBranding(data.branding, j.crestVersion);
+    } catch (e) { /* keep last known media */ }
+  }
+
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function refill(type) { const src = (type === 'video' ? data.videos : data.photos).slice(); return data.settings.shuffle ? shuffle(src) : src; }
+
+  function nextItem() {
+    const hasV = data.videos.length > 0, hasP = data.photos.length > 0;
+    if (!hasV && !hasP) return null;
+    let type = (phase === 'video' && hasV) ? 'video' : 'photo';
+    if (type === 'video' && !hasV) type = 'photo';
+    if (type === 'photo' && !hasP) type = 'video';
+    let url;
+    if (type === 'video') {
+      if (!vQueue.length) vQueue = refill('video');
+      url = vQueue.shift();
+      const gap = Number(data.settings.videoGapPhotos) || 0;
+      if (gap > 0 && hasP) { phase = 'photo'; photosLeft = gap; } else phase = 'video';
+    } else {
+      if (!pQueue.length) pQueue = refill('photo');
+      url = pQueue.shift();
+      photosLeft -= 1;
+      if (photosLeft <= 0) phase = hasV ? 'video' : 'photo';
+    }
+    return { type, url };
+  }
+
+  async function showVideo(url) {
+    vid.muted = !data.settings.includeAudio;
+    vid.src = url; vid.load();
+    const p = vid.play();
+    if (p && p.catch) p.catch(async () => { vid.muted = true; try { await vid.play(); } catch (e) {} });
+    await once(vid, ['playing', 'error'], 8000); // ready (or give up) under the veil
+    photoLayer.style.opacity = 0; photoBackdrop.style.opacity = 0; videoLayer.style.opacity = 1;
+    await fade(0);
+    await once(vid, ['ended', 'error'], 6.5 * 60 * 1000); // hold until it finishes
+    try { vid.pause(); } catch (e) {}
+  }
+
+  async function showPhoto(url) {
+    pic.src = url; backdrop.src = url;
+    await once(pic, ['load', 'error'], 6000);
+    videoLayer.style.opacity = 0;
+    photoBackdrop.style.opacity = 1; photoLayer.style.opacity = 1;
+    photoLayer.classList.remove('kb'); void photoLayer.offsetWidth; photoLayer.classList.add('kb'); // restart Ken Burns
+    try { vid.pause(); } catch (e) {}
+    await fade(0);
+    await wait(Math.max(2, Number(data.settings.photoSeconds) || 7) * 1000);
+  }
+
+  function setStandby(on) { $('#standby').classList.toggle('show', on); }
+
+  async function loop() {
+    while (true) {
+      try {
+        const item = nextItem();
+        await fade(1);
+        if (!item) { setStandby(true); await fade(0); await wait(6000); continue; }
+        setStandby(false);
+        if (item.type === 'video') await showVideo(item.url);
+        else await showPhoto(item.url);
+      } catch (e) { await wait(1200); }
+    }
+  }
+
+  (async () => {
+    await refresh();
+    setInterval(refresh, 45000);
+    loop();
+  })();
+</script>
+</body>
+</html>

@@ -297,6 +297,7 @@ export class Booth extends EventEmitter {
       const dest = join(approvedDir, basename(file));
       await this._moveWithRetry(file, dest);
       this.log(`approved take archived -> ${dest}`);
+      this.emit('approved', dest); // montage prep hooks onto this
     } catch (e) {
       this.notify(`Failed to archive approved take: ${e.message}`, 'archive');
     }

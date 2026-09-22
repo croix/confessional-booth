@@ -5,6 +5,7 @@ import { OBS } from './obs.js';
 import { Booth } from './booth.js';
 import { startServer } from './server.js';
 import { startWatchdog } from './watchdog.js';
+import { makeMontage } from './montage.js';
 
 const cfg = loadConfig();
 const notify = makeNotifier(cfg);
@@ -12,11 +13,20 @@ const setVar = makeCompanion(cfg);
 
 const obs = new OBS(cfg);
 const booth = new Booth(cfg, obs, notify, setVar);
+const montage = makeMontage(cfg);
 
 obs.on('open', () => booth.onObsReady());
 obs.on('close', () => booth.onObsClosed());
 
-startServer(cfg, booth);
+// Prepare a venue MP4 whenever a take is approved (fire-and-forget, queued).
+booth.on('approved', (file) =>
+  montage.prepareClip(file).catch((e) => console.error(`[montage] prepare failed: ${e.message}`)),
+);
+// Catch up any keepers approved before this feature existed / while stopped.
+if (cfg.montage.enabled)
+  montage.prepareAll().then((r) => r.built && console.log(`[montage] prepared ${r.built}/${r.total} existing keepers`)).catch(() => {});
+
+startServer(cfg, booth, montage);
 startWatchdog(cfg, obs, booth);
 obs.connect();
 

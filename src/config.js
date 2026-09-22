@@ -20,11 +20,25 @@ const DEFAULTS = {
     port: 3939,
   },
   recordings: {
+    // Base folder OBS records into (approved/bloopers live under it). Leave null
+    // to use <project>/recordings.
+    dir: null,
     // Approved ("keeper") takes move into this subfolder; everything else that
     // was recorded (start-over / walk-away takes) moves into bloopersSubdir.
     // Nothing is ever deleted.
     approvedSubdir: 'approved',
     bloopersSubdir: 'bloopers',
+  },
+  // Venue montage: loop the approved keepers (+ any uploaded photos) on TVs
+  // around the venue, served at /montage. Each keeper is prepared into a
+  // web-playable MP4; with includeAudio off the venue copy has NO audio at all
+  // (safe to show un-reviewed — a guest can't be overheard saying something off).
+  montage: {
+    enabled: true,
+    includeAudio: false, // false = strip audio from the venue clips entirely
+    photoSeconds: 7, // how long each uploaded photo holds on screen
+    videoGapPhotos: 1, // photos shown between each video
+    shuffle: false, // false = oldest-first; true = shuffle the order
   },
   // These names MUST match the scene/source names you create in OBS.
   scenes: {

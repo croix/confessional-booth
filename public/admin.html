@@ -19,8 +19,18 @@
   .row { display:flex; gap:18px; flex-wrap:wrap; }
   label { display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 6px; }
   .field { flex:1 1 240px; margin-bottom:16px; }
-  input[type=text] { width:100%; background:#0f0d0b; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:11px 12px; font-size:15px; font-family:inherit; }
-  input[type=text]:focus { outline:none; border-color:var(--gold); }
+  input[type=text], input[type=number] { width:100%; background:#0f0d0b; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:11px 12px; font-size:15px; font-family:inherit; }
+  input[type=text]:focus, input[type=number]:focus { outline:none; border-color:var(--gold); }
+  .check { display:flex; align-items:flex-start; gap:11px; margin-bottom:14px; cursor:pointer; }
+  .check input { margin-top:2px; width:18px; height:18px; accent-color:var(--gold); flex:none; }
+  .check .lbl { font-size:14px; color:var(--ink); text-transform:none; letter-spacing:0; }
+  .check .lbl small { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+  .photos { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px,1fr)); gap:12px; margin:14px 0 4px; }
+  .photos .ph { position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; border:1px solid var(--line); background:#0f0d0b; }
+  .photos .ph img { width:100%; height:100%; object-fit:cover; }
+  .photos .ph button { position:absolute; top:5px; right:5px; width:24px; height:24px; border:none; border-radius:6px; background:rgba(10,8,6,.8); color:#fff; cursor:pointer; font-size:13px; line-height:1; }
+  .photos .ph button:hover { background:#a33; }
+  .urlbox { display:flex; align-items:center; gap:10px; background:#0f0d0b; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; color:var(--gold); word-break:break-all; }
   .colors { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px,1fr)); gap:14px; }
   .swatch { display:flex; align-items:center; gap:10px; }
   .swatch input[type=color] { width:44px; height:36px; border:1px solid var(--line); border-radius:8px; background:#0f0d0b; padding:2px; }
@@ -143,6 +153,38 @@
     </div>
     <button class="btn ghost" id="testNotify" type="button">Save &amp; send test alert</button>
     <span id="notifyStatus" class="hint" style="margin-left:14px"></span>
+  </div>
+
+  <div class="card">
+    <h2>Venue Montage</h2>
+    <p class="hint" style="margin:0 0 16px; line-height:1.55">
+      Loops the approved keeper videos (plus any photos you add below) on TVs around the venue.
+      Open the montage URL below in a browser on each TV &mdash; a smart-TV browser, or a cheap Fire Stick / Chromecast.
+      New confessions join the loop automatically as they're approved.
+    </p>
+    <label class="check"><input type="checkbox" id="mEnabled"><span class="lbl">Enable the venue montage</span></label>
+    <label class="check"><input type="checkbox" id="mAudio"><span class="lbl">Play clip audio on the TVs
+      <small>Off (recommended): the venue copies are rendered with <strong>no audio at all</strong>, so an un-reviewed clip can't broadcast something a guest wouldn't want overheard. On: carries the primary mic.</small></span></label>
+    <label class="check"><input type="checkbox" id="mShuffle"><span class="lbl">Shuffle the order <small>Off plays oldest first.</small></span></label>
+    <div class="row">
+      <div class="field" style="flex:0 0 180px"><label>Photo hold (seconds)</label><input type="number" id="mPhotoSeconds" min="2" max="60" value="7"></div>
+      <div class="field" style="flex:0 0 200px"><label>Photos between videos</label><input type="number" id="mGap" min="0" max="5" value="1"></div>
+    </div>
+    <div style="margin:6px 0 18px"><button class="btn" id="mSave" type="button">Save montage settings</button>
+      <span id="mStatus" class="hint" style="margin-left:12px"></span></div>
+
+    <label>Photos to interleave</label>
+    <div class="hint" style="margin:2px 0 6px">Upload JP/PNG (they're auto-resized). Or drop files straight into <code>recordings\montage\photos</code>.</div>
+    <input type="file" id="mPhotoFile" accept="image/*" multiple />
+    <div class="photos" id="mPhotos"></div>
+
+    <div style="margin-top:18px">
+      <label>Montage URL for the TVs</label>
+      <div class="urlbox"><span id="mUrl">&mdash;</span><a class="btn ghost sm" id="mOpen" href="/montage" target="_blank" style="margin-left:auto;white-space:nowrap">Open</a></div>
+      <div class="hint" style="margin-top:8px">Videos are prepared automatically on approval.
+        <a class="inline" href="#" id="mRebuild">Rebuild all clips</a> if you just enabled this, changed the audio setting, or added keepers directly.
+        <span id="mRebuildStatus"></span></div>
+    </div>
   </div>
 
   <div class="card">
@@ -280,7 +322,69 @@
     $('#rebuildDeck').disabled = false;
   };
 
+  // ---- Venue Montage -------------------------------------------------------
+  async function loadMontage() {
+    try {
+      const m = await (await fetch('/api/montage')).json();
+      const s = m.settings || {};
+      $('#mEnabled').checked = s.enabled !== false;
+      $('#mAudio').checked = !!s.includeAudio;
+      $('#mShuffle').checked = !!s.shuffle;
+      $('#mPhotoSeconds').value = s.photoSeconds || 7;
+      $('#mGap').value = (s.videoGapPhotos == null ? 1 : s.videoGapPhotos);
+      $('#mUrl').textContent = m.lanUrl || (location.origin + '/montage');
+      $('#mOpen').href = m.lanUrl || '/montage';
+      renderMontagePhotos(m.photos || []);
+    } catch (e) { $('#mStatus').textContent = 'Could not load montage: ' + e.message; }
+  }
+  function renderMontagePhotos(list) {
+    const wrap = $('#mPhotos'); wrap.innerHTML = '';
+    if (!list.length) { wrap.innerHTML = '<div class="hint">No photos yet.</div>'; return; }
+    for (const p of list) {
+      const d = document.createElement('div'); d.className = 'ph';
+      d.innerHTML = `<img src="${p.url}" alt=""><button title="Remove" type="button">✕</button>`;
+      d.querySelector('button').onclick = async () => {
+        await fetch('/api/montage/photo/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: p.name }) });
+        loadMontage();
+      };
+      wrap.appendChild(d);
+    }
+  }
+  $('#mSave').onclick = async () => {
+    $('#mStatus').textContent = 'Saving…';
+    const body = { enabled: $('#mEnabled').checked, includeAudio: $('#mAudio').checked, shuffle: $('#mShuffle').checked,
+      photoSeconds: Number($('#mPhotoSeconds').value), videoGapPhotos: Number($('#mGap').value) };
+    try {
+      const j = await (await fetch('/api/montage/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })).json();
+      if (!j.ok) throw new Error(j.error || 'save failed');
+      $('#mStatus').textContent = j.rebuilding ? 'Saved — re-rendering clips for the new audio setting…' : 'Saved.';
+    } catch (e) { $('#mStatus').textContent = 'Save failed: ' + e.message; }
+  };
+  $('#mPhotoFile').onchange = async (e) => {
+    const files = [...e.target.files]; if (!files.length) return;
+    $('#mStatus').textContent = `Uploading ${files.length} photo(s)…`;
+    for (const f of files) {
+      const dataUrl = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
+      try {
+        const j = await (await fetch('/api/montage/photo', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ dataUrl, name: f.name }) })).json();
+        if (!j.ok) throw new Error(j.error);
+      } catch (err) { $('#mStatus').textContent = 'Upload failed: ' + err.message; }
+    }
+    e.target.value = '';
+    $('#mStatus').textContent = 'Photos added.';
+    loadMontage();
+  };
+  $('#mRebuild').onclick = async (e) => {
+    e.preventDefault();
+    const st = $('#mRebuildStatus'); st.textContent = ' — rebuilding…';
+    try {
+      const j = await (await fetch('/api/montage/rebuild', { method:'POST' })).json();
+      st.textContent = j.ok ? ` — done (${j.built}/${j.total} clips).` : ' — failed: ' + j.error;
+    } catch (err) { st.textContent = ' — failed: ' + err.message; }
+  };
+
   load();
+  loadMontage();
 </script>
 </body>
 </html>

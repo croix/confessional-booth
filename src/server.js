@@ -15,9 +15,9 @@ function crestVersion() {
 // Tiny HTTP surface. Companion buttons hit the command routes; the /admin app
 // hits the /api/* routes to edit branding + prompts for whatever wedding this
 // is deployed at.
-export function startServer(cfg, booth) {
+export function startServer(cfg, booth, montage) {
   const app = express();
-  app.use(express.json({ limit: '8mb' }));
+  app.use(express.json({ limit: '30mb' })); // photos come in as base64
 
   const command = (fn) => async (req, res) => {
     try {
@@ -101,6 +101,91 @@ export function startServer(cfg, booth) {
       if (code === 0) res.json({ ok: true, log: out.slice(-1500) });
       else res.status(500).json({ ok: false, error: `rebuild exited ${code}`, log: out.slice(-1500) });
     });
+  });
+
+  // ---- Venue montage ------------------------------------------------------
+  // Media served to the venue TVs.
+  if (montage) {
+    app.use('/montage-media/videos', express.static(montage.videosDir, { maxAge: '1h' }));
+    app.use('/montage-media/photos', express.static(montage.photosDir, { maxAge: '1h' }));
+  }
+
+  app.get('/montage', (req, res) => res.sendFile(join(ROOT, 'public', 'montage.html')));
+
+  // Everything the montage page needs: settings, branding and the current media.
+  app.get('/api/montage', async (req, res) => {
+    try {
+      const { videos, photos } = montage ? await montage.listMedia() : { videos: [], photos: [] };
+      res.json({
+        settings: cfg.montage || {},
+        branding: cfg.branding || {},
+        crestVersion: crestVersion(),
+        videos: videos.map((f) => '/montage-media/videos/' + encodeURIComponent(f)),
+        photos: photos.map((f) => ({ name: f, url: '/montage-media/photos/' + encodeURIComponent(f) })),
+        lanUrl: montage && montage.lanHost() ? `http://${montage.lanHost()}:${cfg.server.port}/montage` : null,
+      });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post('/api/montage/settings', async (req, res) => {
+    try {
+      const s = req.body || {};
+      const clean = {
+        enabled: !!s.enabled,
+        includeAudio: !!s.includeAudio,
+        photoSeconds: Math.min(60, Math.max(2, Number(s.photoSeconds) || 7)),
+        videoGapPhotos: Math.min(5, Math.max(0, Number(s.videoGapPhotos) || 0)),
+        shuffle: !!s.shuffle,
+      };
+      const audioChanged = (cfg.montage || {}).includeAudio !== clean.includeAudio;
+      const saved = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+      saved.montage = clean;
+      writeFileSync(CONFIG_PATH, JSON.stringify(saved, null, 2) + '\n');
+      cfg.montage = clean;
+      console.log('[montage] settings saved');
+      // Flipping the audio mode invalidates the prepared clips — rebuild them.
+      if (audioChanged && montage) montage.rebuildAll().catch((e) => console.error(`[montage] rebuild: ${e.message}`));
+      res.json({ ok: true, rebuilding: audioChanged });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Re-prepare every keeper (e.g. first-time setup for already-approved takes).
+  app.post('/api/montage/rebuild', async (req, res) => {
+    try {
+      const r = await montage.prepareAll();
+      res.json({ ok: true, ...r });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post('/api/montage/photo', async (req, res) => {
+    try {
+      const { dataUrl, name } = req.body || {};
+      if (typeof dataUrl !== 'string') throw new Error('expected an image');
+      const m = dataUrl.match(/^data:image\/[\w.+-]+;base64,(.+)$/i);
+      if (!m) throw new Error('expected a base64 image data URL');
+      const buf = Buffer.from(m[1], 'base64');
+      const saved = await montage.savePhoto(buf, name || 'photo');
+      res.json({ ok: true, name: saved, url: '/montage-media/photos/' + encodeURIComponent(saved) });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.post('/api/montage/photo/delete', async (req, res) => {
+    try {
+      const { name } = req.body || {};
+      if (!name) throw new Error('name required');
+      await montage.deletePhoto(name);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message });
+    }
   });
 
   app.post('/api/crest', (req, res) => {
