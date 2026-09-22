@@ -6,7 +6,8 @@
   "description": "Unattended wedding confessional booth controller (OBS + Companion + Stream Deck).",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "bootstrap": "node scripts/bootstrap-obs.mjs"
   },
   "dependencies": {
     "express": "^4.19.2",

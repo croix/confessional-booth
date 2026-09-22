@@ -69,6 +69,26 @@ const DEFAULTS = {
     title: 'Confessional Booth',
     cooldownSeconds: 120, // don't spam the same alert
   },
+  // Cosmetic branding for the full-screen display (public/index.html, served at
+  // /display). Override any of these in config.json.
+  branding: {
+    coupleNames: 'Alex & Jordan',
+    weddingDate: 'the twelfth of June, two thousand twenty-seven',
+    monogram: 'A J',
+    hashtag: '#AlexAndJordan',
+    invite: 'Leave a message for the newlyweds',
+    thanksMessage: 'Your message means the world to us',
+    palette: {
+      bg: '#12100e',
+      panel: '#1b1813',
+      ink: '#f7f2e9',
+      muted: '#c9bda8',
+      gold: '#c9a961',
+      accent: '#7c6a52',
+    },
+    headingFont: 'Cormorant Garamond',
+    bodyFont: 'Montserrat',
+  },
 };
 
 function mergeSection(def, override) {

@@ -25,6 +25,7 @@ export class Booth extends EventEmitter {
     this.status = 'Starting…';
     this.lastFile = null;
     this.currentPrompt = null;
+    this.countdown = null; // live countdown number, for the branded display
     this._lastPromptIndex = -1;
     this._started = false;
 
@@ -38,7 +39,13 @@ export class Booth extends EventEmitter {
   }
 
   getState() {
-    return { state: this.state, status: this.status, lastFile: this.lastFile };
+    return {
+      state: this.state,
+      status: this.status,
+      lastFile: this.lastFile,
+      prompt: this.currentPrompt,
+      countdown: this.countdown,
+    };
   }
 
   // ---- lifecycle hooks from the OBS connection ----------------------------
@@ -108,8 +115,8 @@ export class Booth extends EventEmitter {
     if (this.state !== S.REVIEW) return this._ignored('approve');
     const file = this.lastFile;
     this.lastFile = null;
-    this._archiveApproved(file); // async, self-contained error handling
     this._enterThanks();
+    this._releaseAndArchive(file); // release OBS's file lock, then archive
   }
 
   async reset() {
@@ -130,6 +137,8 @@ export class Booth extends EventEmitter {
   _enterReady() {
     this._clearTimers();
     this.state = S.READY;
+    this.currentPrompt = null;
+    this.countdown = null;
     this.setVar('booth_countdown', '');
     this._pushState('Ready — press START');
     this.obs.setScene(this.cfg.scenes.ready).catch((e) => this._obsError(e));
@@ -148,6 +157,7 @@ export class Booth extends EventEmitter {
     this._pushState('Get ready…');
 
     let n = this.cfg.timings.countdownSeconds;
+    this.countdown = n;
     Promise.all([
       this.obs.setText(this.cfg.sources.promptText, prompt),
       this.obs.setText(this.cfg.sources.countdownText, String(n)),
@@ -157,6 +167,7 @@ export class Booth extends EventEmitter {
 
     this.countdownInterval = setInterval(() => {
       n -= 1;
+      this.countdown = n;
       if (n > 0) {
         this.obs.setText(this.cfg.sources.countdownText, String(n)).catch(() => {});
         this.setVar('booth_countdown', n);
@@ -172,6 +183,7 @@ export class Booth extends EventEmitter {
   async _enterRecording() {
     this._clearTimers();
     this.state = S.RECORDING;
+    this.countdown = null;
     this._pushState('Recording — pause, then press STOP');
     try {
       await this.obs.startRecord();
@@ -193,6 +205,12 @@ export class Booth extends EventEmitter {
     this.lastFile = file;
     this._pushState('Review — APPROVE or START OVER');
     this.log(`review take: ${file}`);
+    // StopRecord returns the path immediately, but OBS is still flushing the
+    // container. If we point the review Media Source at it too early it opens a
+    // zero-duration file and shows black forever. Wait for the file to finish
+    // writing (size stops growing) before loading it. We hold on the RECORDING
+    // scene during this brief wait so the guest never sees a black flash.
+    await this._waitForFileReady(file);
     try {
       await this.obs.setMedia(this.cfg.sources.reviewMedia, file);
       await this.obs.setScene(this.cfg.scenes.review);
@@ -217,27 +235,79 @@ export class Booth extends EventEmitter {
 
   // ---- helpers ------------------------------------------------------------
 
+  // Release OBS's handle on the review file (it keeps it open, and Windows locks
+  // open files), then archive the approved take.
+  async _releaseAndArchive(file) {
+    if (!file) return;
+    try {
+      await this.obs.setMedia(this.cfg.sources.reviewMedia, '');
+    } catch (e) {
+      this._obsError(e);
+    }
+    await this._archiveApproved(file);
+  }
+
   async _archiveApproved(file) {
     if (!file) return;
     try {
       const approvedDir = join(dirname(file), this.cfg.recordings.approvedSubdir);
       await fsp.mkdir(approvedDir, { recursive: true });
       const dest = join(approvedDir, basename(file));
-      try {
-        await fsp.rename(file, dest);
-      } catch (e) {
-        if (e.code === 'EXDEV') {
-          // Different volume: copy then remove.
-          await fsp.copyFile(file, dest);
-          await fsp.unlink(file);
-        } else {
-          throw e;
-        }
-      }
+      await this._moveWithRetry(file, dest);
       this.log(`approved take archived -> ${dest}`);
     } catch (e) {
       this.notify(`Failed to archive approved take: ${e.message}`, 'archive');
     }
+  }
+
+  // Move a file, tolerating OBS briefly still holding the handle (EBUSY/EPERM)
+  // and cross-volume moves (EXDEV).
+  async _moveWithRetry(src, dest, attempts = 10) {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await fsp.rename(src, dest);
+        return;
+      } catch (e) {
+        if (e.code === 'EXDEV') {
+          await fsp.copyFile(src, dest);
+          await fsp.unlink(src);
+          return;
+        }
+        if ((e.code === 'EBUSY' || e.code === 'EPERM') && i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 300));
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
+  // Poll the just-recorded file until it stops growing (OBS has finished
+  // finalizing the container), so review playback opens a complete file.
+  // Resolves early once the size is stable; gives up after timeoutMs and
+  // loads anyway rather than hanging the flow.
+  async _waitForFileReady(file, { timeoutMs = 6000, stableMs = 400, pollMs = 150 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastSize = -1;
+    let stableSince = 0;
+    while (Date.now() < deadline) {
+      let size = 0;
+      try {
+        size = (await fsp.stat(file)).size;
+      } catch {
+        size = 0; // not visible yet
+      }
+      if (size > 0 && size === lastSize) {
+        if (!stableSince) stableSince = Date.now();
+        if (Date.now() - stableSince >= stableMs) return true;
+      } else {
+        stableSince = 0;
+      }
+      lastSize = size;
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    this.log(`review file never stabilized in ${timeoutMs}ms; loading anyway`);
+    return false;
   }
 
   _pickPrompt() {

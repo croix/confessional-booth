@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Confessional Booth Display</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #12100e;
+    --panel: #1b1813;
+    --ink: #f7f2e9;
+    --muted: #c9bda8;
+    --gold: #c9a961;
+    --accent: #7c6a52;
+    --heading: 'Cormorant Garamond', Georgia, serif;
+    --body: 'Montserrat', system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: transparent;           /* camera / video shows through in OBS */
+    color: var(--ink);
+    font-family: var(--body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* When opened with ?preview a stand-in "camera" backdrop is shown so the
+     chrome can be judged outside OBS. In OBS the body stays transparent. */
+  body.preview::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(120% 80% at 50% 20%, #4b4a52 0%, #2a2730 55%, #17151b 100%);
+  }
+  body.preview .previewtag {
+    position: fixed; left: 50%; top: 48%; transform: translate(-50%,-50%);
+    z-index: 1; font-family: var(--body); letter-spacing: .5em;
+    font-size: 14px; color: rgba(255,255,255,.28); text-transform: uppercase;
+  }
+  .previewtag { display: none; }
+
+  #stage { position: fixed; inset: 0; z-index: 2; }
+
+  /* Cinematic vignette + faint grain, always on, ties video + chrome together */
+  .vignette {
+    position: fixed; inset: 0; z-index: 3; pointer-events: none;
+    box-shadow: inset 0 0 260px 70px rgba(0,0,0,.6);
+    background:
+      linear-gradient(to bottom, rgba(0,0,0,.6) 0%, rgba(0,0,0,0) 24%, rgba(0,0,0,0) 56%, rgba(0,0,0,.72) 100%);
+  }
+
+  /* Readability scrims behind text, so copy stays legible over ANY camera
+     content. Shown only in states that place text in that region. */
+  .textscrim {
+    position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0;
+    transition: opacity .5s ease;
+    background: radial-gradient(58% 46% at 50% 50%, rgba(0,0,0,.62) 0%, rgba(0,0,0,.4) 45%, rgba(0,0,0,0) 74%);
+  }
+  .lowerscrim {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 360px; z-index: 4; pointer-events: none; opacity: 0;
+    transition: opacity .5s ease;
+    background: linear-gradient(to top, rgba(0,0,0,.82) 0%, rgba(0,0,0,.45) 40%, rgba(0,0,0,0) 100%);
+  }
+  body[data-state="COUNTDOWN"] .textscrim,
+  body[data-state="READY"] .textscrim,
+  body[data-state="ATTRACT"] .textscrim,
+  body[data-state="REVIEW"] .textscrim { opacity: 1; }
+  body[data-state="COUNTDOWN"] .lowerscrim,
+  body[data-state="RECORDING"] .lowerscrim { opacity: 1; }
+
+  /* Thin gold corner rules */
+  .frame { position: fixed; inset: 46px; z-index: 4; pointer-events: none; }
+  .frame span { position: absolute; width: 74px; height: 74px; opacity: .8; }
+  .frame span::before, .frame span::after { content:""; position:absolute; background: var(--gold); }
+  .frame span::before { width: 100%; height: 1.5px; }
+  .frame span::after { width: 1.5px; height: 100%; }
+  .frame .tl { top: 0; left: 0; } .frame .tr { top: 0; right: 0; } .frame .tr::before{right:0;} .frame .tr::after{right:0;}
+  .frame .bl { bottom: 0; left: 0; } .frame .bl::before{bottom:0;} .frame .bl::after{bottom:0;}
+  .frame .br { bottom: 0; right: 0; } .frame .br::before{bottom:0;right:0;} .frame .br::after{bottom:0;right:0;}
+
+  /* Top monogram bar (present on live states) */
+  .topbar {
+    position: fixed; top: 62px; left: 0; right: 0; z-index: 6;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    opacity: 0; transition: opacity .6s ease;
+  }
+  .monogram {
+    font-family: var(--heading); font-weight: 500; letter-spacing: .18em;
+    font-size: 40px; color: var(--gold);
+    display: flex; align-items: center; gap: 18px;
+  }
+  .monogram .heart { font-size: 22px; color: var(--gold); opacity:.85; transform: translateY(-3px); }
+  .names { font-family: var(--heading); font-style: italic; font-size: 46px; color: var(--ink); opacity:.92; }
+
+  /* Wedding crest, tinted to the palette via CSS mask (single-colour SVG). */
+  .crest {
+    -webkit-mask: url(crest.svg) center / contain no-repeat;
+    mask: url(crest.svg) center / contain no-repeat;
+    background: var(--gold);
+    aspect-ratio: 700 / 760;
+  }
+  .crest.sm { height: 170px; }
+  .crest.lg { height: 300px; margin: 0 auto 10px; filter: drop-shadow(0 6px 30px rgba(0,0,0,.5)); }
+  .crest.md { height: 210px; margin: 0 auto 18px; }
+  .name-lg { font-family: var(--heading); font-style: italic; font-weight: 500; font-size: 58px; color: var(--ink); margin-top: 8px; }
+
+  /* Center content */
+  .center {
+    position: fixed; inset: 0; z-index: 6;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 0 8vw;
+  }
+  .kicker {
+    font-family: var(--body); font-weight: 400; letter-spacing: .46em;
+    text-transform: uppercase; font-size: 15px; color: var(--gold);
+    margin-bottom: 26px;
+  }
+  .headline {
+    font-family: var(--heading); font-weight: 500; line-height: 1.04;
+    font-size: 92px; color: var(--ink); text-shadow: 0 2px 30px rgba(0,0,0,.5);
+  }
+  .headline.script { font-style: italic; }
+  .sub { font-family: var(--heading); font-size: 34px; color: var(--muted); margin-top: 22px; }
+
+  /* Prompt lower-third */
+  .lower {
+    position: fixed; left: 0; right: 0; bottom: 92px; z-index: 6;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: 0 10vw; opacity: 0; transition: opacity .5s ease;
+  }
+  .lower .plabel { font-family: var(--body); letter-spacing:.4em; text-transform:uppercase; font-size:13px; color:var(--gold); margin-bottom:14px; }
+  .lower .prompt {
+    font-family: var(--heading); font-style: italic; font-weight: 500;
+    font-size: 52px; line-height: 1.12; color: var(--ink);
+    text-shadow: 0 2px 24px rgba(0,0,0,.65);
+    max-width: 20ch;
+  }
+
+  /* REC pill */
+  .rec {
+    position: fixed; top: 60px; left: 66px; z-index: 7;
+    display: none; align-items: center; gap: 14px;
+    padding: 12px 22px 12px 18px; border-radius: 999px;
+    background: rgba(20,16,14,.55); border: 1px solid rgba(201,169,97,.35);
+    backdrop-filter: blur(6px);
+  }
+  .rec .dot { width: 16px; height: 16px; border-radius: 50%; background: #e0483d; box-shadow: 0 0 16px #e0483d; animation: pulse 1.4s infinite; }
+  .rec .txt { font-family: var(--body); letter-spacing:.32em; font-size: 14px; text-transform: uppercase; color: var(--ink); }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.35;transform:scale(.82);} }
+
+  /* Countdown ring */
+  .countwrap { position: relative; display: flex; align-items: center; justify-content: center; }
+  .countwrap svg { transform: rotate(-90deg); }
+  .countwrap .ring-bg { fill: none; stroke: rgba(247,242,233,.15); stroke-width: 4; }
+  .countwrap .ring-fg { fill: none; stroke: var(--gold); stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+  .countnum {
+    position: absolute; font-family: var(--heading); font-weight: 600;
+    font-size: 220px; line-height: 1; color: var(--ink); text-shadow: 0 4px 40px rgba(0,0,0,.55);
+  }
+  .countnum.pop { animation: pop .5s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes pop { 0%{transform:scale(.55);opacity:0;} 60%{transform:scale(1.06);opacity:1;} 100%{transform:scale(1);} }
+
+  /* Review affordances */
+  .choices { display: flex; gap: 42px; margin-top: 42px; }
+  .choice {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    padding: 22px 44px; border-radius: 14px; min-width: 260px;
+    background: rgba(27,24,19,.55); border: 1px solid rgba(201,169,97,.4);
+    backdrop-filter: blur(6px);
+  }
+  .choice.primary { border-color: var(--gold); background: rgba(201,169,97,.14); }
+  .choice .verb { font-family: var(--heading); font-size: 40px; color: var(--ink); }
+  .choice .hint { font-family: var(--body); letter-spacing:.28em; text-transform:uppercase; font-size: 12px; color: var(--muted); }
+
+  /* Press-start cue */
+  .cue {
+    margin-top: 46px; display: inline-flex; align-items: center; gap: 16px;
+    font-family: var(--body); letter-spacing: .34em; text-transform: uppercase; font-size: 16px; color: var(--ink);
+    animation: breathe 2.6s ease-in-out infinite;
+  }
+  .cue .chip { padding: 10px 20px; border: 1px solid var(--gold); border-radius: 999px; color: var(--gold); }
+  @keyframes breathe { 0%,100%{opacity:.55;} 50%{opacity:1;} }
+
+  .datefoot {
+    position: fixed; bottom: 60px; left: 0; right: 0; z-index: 6; text-align: center;
+    font-family: var(--heading); font-style: italic; font-size: 24px; color: var(--muted);
+    opacity: 0; transition: opacity .6s ease;
+  }
+  .hashtag { font-family: var(--body); letter-spacing:.3em; text-transform:uppercase; font-size:13px; color: var(--gold); margin-top: 10px; }
+
+  /* THANKS full screen scrim */
+  .thanksscrim {
+    position: fixed; inset: 0; z-index: 5; opacity: 0; transition: opacity .6s ease;
+    background: radial-gradient(120% 90% at 50% 35%, rgba(18,16,14,.72), rgba(18,16,14,.95));
+  }
+
+  /* Panels: shown/hidden by state */
+  .panel { opacity: 0; transform: translateY(10px); transition: opacity .55s ease, transform .55s ease; pointer-events: none; }
+  .panel.on { opacity: 1; transform: none; }
+
+  /* State-driven visibility */
+  /* REC pill intentionally never shown — recordings stay clean (crest + names +
+     prompt only). Guests are cued by the countdown ending and seeing themselves. */
+  body[data-state="ATTRACT"] .topbar,
+  body[data-state="READY"] .topbar,
+  body[data-state="COUNTDOWN"] .topbar,
+  body[data-state="RECORDING"] .topbar { opacity: 1; }
+  body[data-state="ATTRACT"] .datefoot,
+  body[data-state="READY"] .datefoot,
+  body[data-state="THANKS"] .datefoot { opacity: 1; }
+  body[data-state="THANKS"] .thanksscrim { opacity: 1; }
+  body[data-state="COUNTDOWN"] .lower.prompted,
+  body[data-state="RECORDING"] .lower.prompted { opacity: 1; }
+</style>
+</head>
+<body data-state="READY">
+  <div class="previewtag">live camera</div>
+  <div id="stage"></div>
+  <div class="vignette"></div>
+  <div class="textscrim"></div>
+  <div class="lowerscrim"></div>
+  <div class="frame"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+  <div class="topbar">
+    <div class="crest sm"></div>
+    <div class="names" id="names">Erik &amp; James</div>
+  </div>
+
+  <div class="rec"><span class="dot"></span><span class="txt">Rec</span></div>
+
+  <!-- ATTRACT -->
+  <div class="center panel" data-for="ATTRACT">
+    <div class="crest lg"></div>
+    <div class="kicker" id="attractKicker">Leave a message for the newlyweds</div>
+    <div class="name-lg" id="attractHead">Erik &amp; James</div>
+    <div class="cue"><span>Press</span><span class="chip">Start</span><span>to begin</span></div>
+  </div>
+
+  <!-- READY -->
+  <div class="center panel" data-for="READY">
+    <div class="kicker">The Confessional</div>
+    <div class="headline">Find your light,<br/>get comfortable</div>
+    <div class="cue"><span>Press</span><span class="chip">Start</span><span>when you're ready</span></div>
+  </div>
+
+  <!-- COUNTDOWN -->
+  <div class="center panel" data-for="COUNTDOWN">
+    <div class="countwrap">
+      <svg width="360" height="360" viewBox="0 0 360 360">
+        <circle class="ring-bg" cx="180" cy="180" r="168"></circle>
+        <circle class="ring-fg" id="ring" cx="180" cy="180" r="168"></circle>
+      </svg>
+      <div class="countnum" id="countnum">3</div>
+    </div>
+  </div>
+
+  <!-- RECORDING center is empty; prompt shows in lower third -->
+
+  <!-- REVIEW -->
+  <div class="center panel" data-for="REVIEW">
+    <div class="kicker">How did that feel?</div>
+    <div class="choices">
+      <div class="choice primary"><span class="verb">Keep it</span><span class="hint">Press Approve</span></div>
+      <div class="choice"><span class="verb">Start over</span><span class="hint">Press Start Over</span></div>
+    </div>
+  </div>
+
+  <!-- THANKS -->
+  <div class="center panel" data-for="THANKS">
+    <div class="crest md"></div>
+    <div class="kicker">With love</div>
+    <div class="headline script">Thank you</div>
+    <div class="sub" id="thanksSub">Your message means the world to us</div>
+  </div>
+
+  <!-- Prompt lower-third (COUNTDOWN + RECORDING) -->
+  <div class="lower prompted">
+    <div class="plabel">Your question</div>
+    <div class="prompt" id="prompt">&nbsp;</div>
+  </div>
+
+  <div class="datefoot">
+    <div class="hashtag" id="hashtag">#ErikAndJames</div>
+  </div>
+
+<script>
+  if (location.search.includes('preview')) document.body.classList.add('preview');
+
+  const $ = (s) => document.querySelector(s);
+  const panels = [...document.querySelectorAll('.panel')];
+  const RING_LEN = 2 * Math.PI * 168;
+  $('#ring').style.strokeDasharray = RING_LEN;
+
+  // ---- branding ----
+  async function loadBranding() {
+    try {
+      const b = await (await fetch('/branding')).json();
+      const p = b.palette || {};
+      const r = document.documentElement.style;
+      if (p.bg) r.setProperty('--bg', p.bg);
+      if (p.panel) r.setProperty('--panel', p.panel);
+      if (p.ink) r.setProperty('--ink', p.ink);
+      if (p.muted) r.setProperty('--muted', p.muted);
+      if (p.gold) r.setProperty('--gold', p.gold);
+      if (p.accent) r.setProperty('--accent', p.accent);
+      if (b.headingFont) r.setProperty('--heading', `'${b.headingFont}', Georgia, serif`);
+      if (b.bodyFont) r.setProperty('--body', `'${b.bodyFont}', system-ui, sans-serif`);
+      if (b.coupleNames) { $('#names').textContent = b.coupleNames; $('#attractHead').textContent = b.coupleNames; }
+      if (b.crest) { for (const el of document.querySelectorAll('.crest')) { el.style.webkitMaskImage = `url(${b.crest})`; el.style.maskImage = `url(${b.crest})`; } }
+      if (b.invite) $('#attractKicker').textContent = b.invite;
+      if (b.hashtag) $('#hashtag').textContent = b.hashtag; else $('#hashtag').style.display = 'none';
+      if (b.thanksMessage) $('#thanksSub').textContent = b.thanksMessage;
+    } catch (e) { /* keep defaults */ }
+  }
+
+  // ---- state ----
+  let cur = null, maxCount = null, lastNum = null;
+  function show(state) {
+    document.body.dataset.state = state;
+    panels.forEach((p) => p.classList.toggle('on', p.dataset.for === state));
+  }
+  function render(s) {
+    if (s.state !== cur) { show(s.state); cur = s.state; if (s.state !== 'COUNTDOWN') { maxCount = null; lastNum = null; } }
+    // prompt
+    const promptEl = $('#prompt');
+    if (s.prompt && (s.state === 'COUNTDOWN' || s.state === 'RECORDING')) promptEl.textContent = s.prompt;
+    // countdown
+    if (s.state === 'COUNTDOWN' && s.countdown != null) {
+      if (maxCount == null) maxCount = Math.max(1, s.countdown);
+      const n = s.countdown;
+      const el = $('#countnum');
+      if (n !== lastNum) {
+        el.textContent = n > 0 ? n : 1;
+        el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+        const frac = Math.max(0, Math.min(1, n / maxCount));
+        $('#ring').style.strokeDashoffset = RING_LEN * (1 - frac);
+        lastNum = n;
+      }
+    }
+  }
+
+  async function poll() {
+    try { const s = await (await fetch('/state', { cache: 'no-store' })).json(); render(s); }
+    catch (e) { /* controller momentarily unreachable */ }
+  }
+  loadBranding();
+  poll();
+  setInterval(poll, 200);
+</script>
+</body>
+</html>

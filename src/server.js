@@ -1,4 +1,8 @@
 import express from 'express';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Tiny HTTP surface. Companion buttons hit these; commands accept GET or POST so
 // either Companion HTTP action works. State-changing routes are guarded inside
@@ -22,6 +26,14 @@ export function startServer(cfg, booth) {
   app.all('/reset', command(() => booth.reset()));
 
   app.get('/state', (req, res) => res.json(booth.getState()));
+
+  // Branding for the display (couple names, colours, monogram, …) from config.
+  app.get('/branding', (req, res) => res.json(cfg.branding || {}));
+
+  // The full-screen branded booth display. Point an OBS Browser Source at
+  // http://127.0.0.1:3939/display — it polls /state and renders each screen.
+  app.use('/display', express.static(join(ROOT, 'public')));
+
   app.get('/', (req, res) =>
     res
       .type('text')
