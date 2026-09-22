@@ -4,7 +4,7 @@ import { S } from './booth.js';
 // alert if either looks wrong:
 //   1. While RECORDING, the output file should be growing.
 //   2. While a live-camera scene is up, the feed shouldn't be black
-//      (catches the A7III sleeping / overheating / a yanked micro-HDMI).
+//      (catches the camera sleeping / overheating / a yanked HDMI cable).
 export function startWatchdog(cfg, obs, booth) {
   const cameraStates = new Set([S.READY, S.COUNTDOWN, S.RECORDING]);
   let lastBytes = -1;
@@ -33,7 +33,7 @@ export function startWatchdog(cfg, obs, booth) {
           blackStrikes += 1;
           if (blackStrikes >= cfg.watchdog.blackStrikes) {
             booth.notify(
-              `Camera feed looks black (brightness ${brightness.toFixed(1)}). Check the A7III power/HDMI.`,
+              `Camera feed looks black (brightness ${brightness.toFixed(1)}). Check the camera power and HDMI.`,
               'black',
             );
           }

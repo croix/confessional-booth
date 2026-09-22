@@ -21,8 +21,12 @@ $DiskMinGB = 15
 
 function Send-Alert($msg, $priority = 'high', $tags = 'rotating_light') {
   Write-Host "[ALERT] $msg"
-  if ([string]::IsNullOrWhiteSpace($NotifyUrl)) { return }
-  try { Invoke-RestMethod -Uri $NotifyUrl -Method Post -Body $msg -Headers @{ Title = 'Confessional Booth'; Priority = $priority; Tags = $tags } -TimeoutSec 8 | Out-Null } catch {}
+  # Re-read the topic each call so changing it in /admin takes effect without a
+  # supervisor restart. Falls back to the value loaded at startup.
+  $url = $NotifyUrl
+  try { $u = (Get-Content (Join-Path $Proj 'config.json') -Raw | ConvertFrom-Json).notify.url; if ($u) { $url = $u } } catch {}
+  if ([string]::IsNullOrWhiteSpace($url)) { return }
+  try { Invoke-RestMethod -Uri $url -Method Post -Body $msg -Headers @{ Title = 'Confessional Booth'; Priority = $priority; Tags = $tags } -TimeoutSec 8 | Out-Null } catch {}
 }
 function OBS-Up   { [bool](Get-Process obs64 -ErrorAction SilentlyContinue) }
 function Comp-Up  { [bool](Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like 'C:\Program Files\Companion\*' } | Select-Object -First 1) }

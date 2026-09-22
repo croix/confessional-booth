@@ -44,25 +44,41 @@ export function startServer(cfg, booth) {
 
   // ---- Admin API (edit config for this wedding) ---------------------------
   app.get('/api/config', (req, res) => {
-    res.json({ branding: cfg.branding || {}, prompts: cfg.prompts || [] });
+    res.json({ branding: cfg.branding || {}, prompts: cfg.prompts || [], notify: cfg.notify || {} });
   });
 
   app.post('/api/config', (req, res) => {
     try {
-      const { branding, prompts } = req.body || {};
+      const { branding, prompts, notify } = req.body || {};
       if (branding && typeof branding !== 'object') throw new Error('branding must be an object');
       if (prompts && !Array.isArray(prompts)) throw new Error('prompts must be a list');
+      if (notify && typeof notify !== 'object') throw new Error('notify must be an object');
+      if (notify && notify.url && !/^https?:\/\//i.test(notify.url))
+        throw new Error('notify url must start with http:// or https://');
       const saved = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
       if (branding) saved.branding = branding;
       if (prompts) saved.prompts = prompts;
+      if (notify) saved.notify = { ...(saved.notify || {}), ...notify };
       writeFileSync(CONFIG_PATH, JSON.stringify(saved, null, 2) + '\n');
-      // apply in-memory so the live display picks it up on its next poll
+      // apply in-memory so the live display + notifier pick it up right away
       if (branding) cfg.branding = branding;
       if (prompts) cfg.prompts = prompts;
+      if (notify) cfg.notify = { ...(cfg.notify || {}), ...notify };
       console.log('[admin] config saved');
       res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Fire a test alert through the current notify webhook so the operator can
+  // confirm their phone is subscribed and receiving.
+  app.post('/api/test-notify', async (req, res) => {
+    try {
+      await booth.notify('Test alert from the booth admin — notifications are working. 🔔');
+      res.json({ ok: true, url: cfg.notify && cfg.notify.url ? cfg.notify.url : '' });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
     }
   });
 

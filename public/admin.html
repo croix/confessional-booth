@@ -124,6 +124,28 @@
   </div>
 
   <div class="card">
+    <h2>Text Alerts</h2>
+    <p class="hint" style="margin:0 0 16px; line-height:1.55">
+      The booth sends a push alert to your phone if the camera feed goes black, a recording stalls, the disk runs low, or something crashes.
+      Alerts go through <strong>ntfy</strong> &mdash; a free push-notification app (no account needed). To receive them:
+      install ntfy (<a class="inline" href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank">iPhone</a> &middot;
+      <a class="inline" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank">Android</a>),
+      open it, tap <strong>+</strong>, and subscribe to the topic shown below.
+    </p>
+    <div class="field">
+      <label>Alert webhook (ntfy topic URL)</label>
+      <input type="text" id="notifyUrl" placeholder="https://ntfy.sh/your-secret-topic" />
+      <div class="hint" id="subscribeHint" style="margin-top:8px"></div>
+    </div>
+    <div class="field" style="max-width:360px">
+      <label>Alert title (shown as the notification header)</label>
+      <input type="text" id="notifyTitle" placeholder="Confessional Booth" />
+    </div>
+    <button class="btn ghost" id="testNotify" type="button">Save &amp; send test alert</button>
+    <span id="notifyStatus" class="hint" style="margin-left:14px"></span>
+  </div>
+
+  <div class="card">
     <h2>Stream Deck</h2>
     <p class="hint" style="margin:0 0 14px">The deck buttons don't change per wedding, but the corner crest does. After uploading a new crest, rebuild the deck to update it. Companion restarts and the deck reconnects (~30s).</p>
     <button class="btn ghost" id="rebuildDeck" type="button">Rebuild Stream Deck</button>
@@ -146,6 +168,18 @@
   let branding = {};
 
   function setStatus(msg, cls='') { const el=$('#status'); el.textContent=msg; el.className='status '+cls; }
+
+  function updateSubscribeHint() {
+    const el = $('#subscribeHint');
+    const url = ($('#notifyUrl').value || '').trim();
+    if (!url) { el.innerHTML = 'No webhook set &mdash; alerts are logged only, not pushed to a phone.'; return; }
+    let topic = '', host = '';
+    try { const u = new URL(url); host = u.host; topic = u.pathname.replace(/^\/+|\/+$/g,''); } catch { el.innerHTML = 'Enter a full URL, e.g. <code>https://ntfy.sh/your-secret-topic</code>.'; return; }
+    if (!topic) { el.innerHTML = 'Add a topic to the URL, e.g. <code>https://ntfy.sh/your-secret-topic</code>.'; return; }
+    el.innerHTML = `In the ntfy app, subscribe to topic <strong>${topic}</strong>` +
+      (host === 'ntfy.sh' ? '' : ` on server <strong>${host}</strong>`) +
+      ` &mdash; or open <a class="inline" href="${url}" target="_blank">the topic page</a> to scan a QR code. Anyone with this topic can read alerts, so keep it secret.`;
+  }
 
   function renderColors(pal) {
     const wrap = $('#colors'); wrap.innerHTML='';
@@ -173,6 +207,10 @@
       for (const k of TEXT_KEYS) { const el = document.getElementById(k); if (el) el.value = branding[k] || ''; }
       renderColors(branding.palette || {});
       renderPrompts(cfg.prompts || []);
+      const notify = cfg.notify || {};
+      $('#notifyUrl').value = notify.url || '';
+      $('#notifyTitle').value = notify.title || '';
+      updateSubscribeHint();
       $('#crestFill').style.setProperty('--m', `url(${branding.crest || 'crest.svg'}?v=${Date.now()})`);
       setStatus('Ready.');
     } catch (e) { setStatus('Failed to load config: '+e.message, 'err'); }
@@ -184,10 +222,28 @@
     const prompts = [...document.querySelectorAll('#prompts input')].map(i => i.value.trim()).filter(Boolean);
     const b = { ...branding, palette };
     for (const k of TEXT_KEYS) { const el = document.getElementById(k); if (el) b[k] = el.value.trim(); }
-    return { branding: b, prompts };
+    const notify = { url: $('#notifyUrl').value.trim(), title: $('#notifyTitle').value.trim() };
+    return { branding: b, prompts, notify };
   }
 
   $('#addPrompt').onclick = () => addPromptRow('');
+  $('#notifyUrl').addEventListener('input', updateSubscribeHint);
+
+  $('#testNotify').onclick = async () => {
+    const el = $('#notifyStatus');
+    const btn = $('#testNotify'); btn.disabled = true;
+    el.textContent = 'Saving & sending…';
+    try {
+      // Save first so the test uses whatever is typed here.
+      const s = await (await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gather()) })).json();
+      if (!s.ok) throw new Error(s.error || 'save failed');
+      branding = gather().branding;
+      const r = await (await fetch('/api/test-notify', { method:'POST' })).json();
+      if (!r.ok) throw new Error(r.error || 'send failed');
+      el.textContent = r.url ? 'Sent! Check your phone — it should arrive in a few seconds.' : 'Saved, but no webhook is set, so nothing was pushed.';
+    } catch (e) { el.textContent = 'Test failed: ' + e.message; }
+    btn.disabled = false;
+  };
   $('#save').onclick = async () => {
     setStatus('Saving…');
     try {
