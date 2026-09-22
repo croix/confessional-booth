@@ -28,8 +28,9 @@ Booth monitor <-- OBS Fullscreen Projector (guest scene)
 
 - **Self-healing for unattended use:** auto-stops a runaway recording, and a
   walk-away in the review screen keeps the take and resets for the next guest.
-- **Keeps bloopers:** "start over" never deletes — only *approved* takes are
-  moved into the `approved/` subfolder. Everything else stays put.
+- **Keeps bloopers:** "start over" never deletes — *approved* takes go to the
+  `approved/` subfolder and everything else (start-over / walk-away takes) goes
+  to `bloopers/`. Nothing is ever thrown away.
 - **Playback of the just-recorded take:** it reads the file path OBS returns on
   stop and loads it into the review Media Source automatically.
 - **Watchdog:** phone alert if the recording stalls or the camera goes black.

@@ -95,17 +95,21 @@ export class Booth extends EventEmitter {
   async startOver() {
     if (this.state === S.COUNTDOWN) return this._enterReady();
     if (this.state === S.REVIEW) {
-      this.lastFile = null; // stays on disk as a blooper, just no longer "current"
+      const file = this.lastFile;
+      this.lastFile = null;
+      this._archiveBlooper(file, true); // still loaded in the review source
       return this._enterCountdown();
     }
     if (this.state === S.RECORDING) {
       this.state = S.STOPPING;
       this._clearTimers();
+      let path;
       try {
-        await this.obs.stopRecord(); // kept as a blooper, not archived
+        path = await this.obs.stopRecord();
       } catch (e) {
         this._obsError(e);
       }
+      if (path) this._archiveBlooper(path, false); // not in the review source yet
       return this._enterCountdown();
     }
     return this._ignored('startover');
@@ -121,14 +125,18 @@ export class Booth extends EventEmitter {
 
   async reset() {
     this._clearTimers();
+    const wasReview = this.state === S.REVIEW;
+    let file = wasReview ? this.lastFile : null;
     if (this.state === S.RECORDING || this.state === S.STOPPING) {
       try {
-        await this.obs.stopRecord();
+        const p = await this.obs.stopRecord();
+        if (p) file = p;
       } catch {
         /* may not be recording; ignore */
       }
     }
     this.lastFile = null;
+    if (file) this._archiveBlooper(file, wasReview); // keep any in-flight take
     this._enterReady();
   }
 
@@ -218,9 +226,13 @@ export class Booth extends EventEmitter {
     } catch (e) {
       this._obsError(e);
     }
-    // Walk-away safety: keep the take (don't delete), reset for the next guest.
+    // Walk-away safety: keep the take as a blooper (never delete), reset for
+    // the next guest.
     this.timer = setTimeout(() => {
-      this.log('review timeout — keeping take, returning to ready');
+      this.log('review timeout — walk-away, filing take as a blooper');
+      const file = this.lastFile;
+      this.lastFile = null;
+      this._archiveBlooper(file, true);
       this._enterReady();
     }, this.cfg.timings.reviewTimeoutSeconds * 1000);
   }
@@ -245,6 +257,32 @@ export class Booth extends EventEmitter {
       this._obsError(e);
     }
     await this._archiveApproved(file);
+  }
+
+  // File a non-approved take (start-over / walk-away / reset) into the bloopers
+  // folder. Never deletes. If it's still loaded in the review source, release
+  // OBS's handle first so the move isn't blocked.
+  async _archiveBlooper(file, heldByReview) {
+    if (!file) return;
+    if (heldByReview) {
+      try {
+        await this.obs.setMedia(this.cfg.sources.reviewMedia, '');
+      } catch (e) {
+        this._obsError(e);
+      }
+    }
+    // A take cancelled mid-recording may still be finalizing on disk; wait for
+    // it to finish writing before moving so the move can't miss the file.
+    await this._waitForFileReady(file);
+    try {
+      const dir = join(dirname(file), this.cfg.recordings.bloopersSubdir);
+      await fsp.mkdir(dir, { recursive: true });
+      const dest = join(dir, basename(file));
+      await this._moveWithRetry(file, dest);
+      this.log(`blooper kept -> ${dest}`);
+    } catch (e) {
+      this.notify(`Failed to file blooper: ${e.message}`, 'blooper');
+    }
   }
 
   async _archiveApproved(file) {

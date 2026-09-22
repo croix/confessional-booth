@@ -20,9 +20,11 @@ const DEFAULTS = {
     port: 3939,
   },
   recordings: {
-    // Approved takes are moved into this subfolder, next to wherever OBS
-    // writes the file. Everything not approved stays put as a "blooper".
+    // Approved ("keeper") takes move into this subfolder; everything else that
+    // was recorded (start-over / walk-away takes) moves into bloopersSubdir.
+    // Nothing is ever deleted.
     approvedSubdir: 'approved',
+    bloopersSubdir: 'bloopers',
   },
   // These names MUST match the scene/source names you create in OBS.
   scenes: {
