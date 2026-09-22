@@ -245,14 +245,14 @@
     <div class="crest lg"></div>
     <div class="kicker" id="attractKicker">Leave a message for the newlyweds</div>
     <div class="name-lg" id="attractHead">Erik &amp; James</div>
-    <div class="cue"><span>Press</span><span class="chip">Start</span><span>to begin</span></div>
+    <div class="cue" id="attractCue"><span>Press</span><span class="chip">Start</span><span>to begin</span></div>
   </div>
 
   <!-- READY -->
   <div class="center panel" data-for="READY">
-    <div class="kicker">The Confessional</div>
-    <div class="headline">Find your light,<br/>get comfortable</div>
-    <div class="cue"><span>Press</span><span class="chip">Start</span><span>when you're ready</span></div>
+    <div class="kicker" id="readyKicker">The Confessional</div>
+    <div class="headline" id="readyHeadline">Find your light, get comfortable</div>
+    <div class="cue" id="readyCue"><span>Press</span><span class="chip">Start</span><span>when you're ready</span></div>
   </div>
 
   <!-- COUNTDOWN -->
@@ -270,18 +270,18 @@
 
   <!-- REVIEW -->
   <div class="center panel" data-for="REVIEW">
-    <div class="kicker">How did that feel?</div>
+    <div class="kicker" id="reviewKicker">How did that feel?</div>
     <div class="choices">
-      <div class="choice primary"><span class="verb">Keep it</span><span class="hint">Press Approve</span></div>
-      <div class="choice"><span class="verb">Start over</span><span class="hint">Press Start Over</span></div>
+      <div class="choice primary"><span class="verb" id="keepLabel">Keep it</span><span class="hint" id="keepHint">Press Approve</span></div>
+      <div class="choice"><span class="verb" id="redoLabel">Start over</span><span class="hint" id="redoHint">Press Start Over</span></div>
     </div>
   </div>
 
   <!-- THANKS -->
   <div class="center panel" data-for="THANKS">
     <div class="crest md"></div>
-    <div class="kicker">With love</div>
-    <div class="headline script">Thank you</div>
+    <div class="kicker" id="thanksKicker">With love</div>
+    <div class="headline script" id="thanksHeadline">Thank you</div>
     <div class="sub" id="thanksSub">Your message means the world to us</div>
   </div>
 
@@ -304,6 +304,29 @@
   const RING_LEN = 2 * Math.PI * 168;
   $('#ring').style.strokeDasharray = RING_LEN;
 
+  // ---- prompts: show 2 random from the pool, re-picked per guest + on idle ----
+  let promptPool = [], prompted = false;
+  function pickPrompts(n = 2) {
+    const w = $('#prompts'); if (!w) return;
+    const pool = [...promptPool];
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    w.innerHTML = '';
+    for (const q of pool.slice(0, n)) { const d = document.createElement('div'); d.className = 'q'; d.textContent = q; w.appendChild(d); }
+  }
+
+  // Render a cue like "Press {START} to begin" — the {…} word becomes the chip.
+  function renderCue(el, tmpl) {
+    if (!el) return;
+    el.innerHTML = '';
+    for (const part of String(tmpl).split(/(\{[^}]+\})/)) {
+      const t = part.trim(); if (!t) continue;
+      const m = t.match(/^\{([^}]+)\}$/);
+      const span = document.createElement('span');
+      if (m) { span.className = 'chip'; span.textContent = m[1].trim(); } else span.textContent = t;
+      el.appendChild(span);
+    }
+  }
+
   // ---- branding (re-applied on a timer so /admin edits go live) ----
   let crestVer = -1;
   async function applyBranding() {
@@ -319,6 +342,14 @@
       if (b.coupleNames) { $('#names').textContent = b.coupleNames; $('#attractHead').textContent = b.coupleNames; }
       if (b.invite) $('#attractKicker').textContent = b.invite;
       if (b.thanksMessage) $('#thanksSub').textContent = b.thanksMessage;
+      const setText = (id, v) => { if (v != null) { const el = $('#' + id); if (el) el.textContent = v; } };
+      setText('readyKicker', b.readyKicker); setText('readyHeadline', b.readyHeadline);
+      setText('reviewKicker', b.reviewKicker);
+      setText('keepLabel', b.keepLabel); setText('keepHint', b.keepHint);
+      setText('redoLabel', b.redoLabel); setText('redoHint', b.redoHint);
+      setText('thanksKicker', b.thanksKicker); setText('thanksHeadline', b.thanksHeadline);
+      if (b.readyCue) renderCue($('#readyCue'), b.readyCue);
+      if (b.attractCue) renderCue($('#attractCue'), b.attractCue);
       // crest: cache-bust the mask when it changes
       if (b.crestVersion !== crestVer) {
         crestVer = b.crestVersion;
@@ -329,10 +360,7 @@
       if (b.promptIntro) { intro.textContent = b.promptIntro; intro.style.display = ''; } else intro.style.display = 'none';
       const ff = $('#freeform');
       if (b.freeform) { ff.innerHTML = b.freeform; ff.style.display = ''; } else ff.style.display = 'none';
-      if (Array.isArray(b.prompts)) {
-        const w = $('#prompts'); w.innerHTML = '';
-        for (const q of b.prompts.slice(0, 3)) { const d = document.createElement('div'); d.className = 'q'; d.textContent = q; w.appendChild(d); }
-      }
+      if (Array.isArray(b.prompts)) { promptPool = b.prompts; if (!prompted) { prompted = true; pickPrompts(); } }
       const ht = $('#hashtag');
       if (b.hashtag) { ht.textContent = b.hashtag; ht.style.display = ''; } else ht.style.display = 'none';
     } catch (e) { /* keep current */ }
@@ -345,7 +373,7 @@
     panels.forEach((p) => p.classList.toggle('on', p.dataset.for === state));
   }
   function render(s) {
-    if (s.state !== cur) { show(s.state); cur = s.state; if (s.state !== 'COUNTDOWN') { maxCount = null; lastNum = null; } }
+    if (s.state !== cur) { show(s.state); cur = s.state; if (s.state !== 'COUNTDOWN') { maxCount = null; lastNum = null; } if (s.state === 'READY') pickPrompts(); }
     // countdown
     if (s.state === 'COUNTDOWN' && s.countdown != null) {
       if (maxCount == null) maxCount = Math.max(1, s.countdown);
@@ -367,6 +395,7 @@
   }
   applyBranding();
   setInterval(applyBranding, 8000);
+  setInterval(() => { if (cur === 'READY') pickPrompts(); }, 12000); // rotate ideas while idle
   poll();
   setInterval(poll, 200);
 </script>

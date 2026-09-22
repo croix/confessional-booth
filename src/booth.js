@@ -194,12 +194,16 @@ export class Booth extends EventEmitter {
     this.countdown = null;
     this._pushState('Recording — pause, then press STOP');
     try {
+      // Switch to the clean camera scene BEFORE recording starts, and let any
+      // scene transition finish, so the countdown overlay never lands in the
+      // first frames of the file.
+      await this.obs.setScene(this.cfg.scenes.recording);
+      await new Promise((r) => setTimeout(r, this.cfg.timings.recordStartDelayMs));
       await this.obs.startRecord();
     } catch (e) {
       this._obsError(e, 'Could not start recording');
       return this._enterReady();
     }
-    this.obs.setScene(this.cfg.scenes.recording).catch((e) => this._obsError(e));
     // Safety: if nobody ever presses STOP, end the take ourselves.
     this.timer = setTimeout(() => {
       this.log('max record length reached — auto-stopping');

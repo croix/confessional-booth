@@ -2,6 +2,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, statSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_PATH = join(ROOT, 'config.json');
@@ -63,6 +64,27 @@ export function startServer(cfg, booth) {
     } catch (e) {
       res.status(400).json({ ok: false, error: e.message });
     }
+  });
+
+  // Rebuild the Stream Deck (re-render crest + regenerate layout + restart
+  // Companion) by running the bundled PowerShell script. Localhost-only.
+  let rebuildRunning = false;
+  app.post('/api/rebuild-deck', (req, res) => {
+    if (rebuildRunning) return res.status(409).json({ ok: false, error: 'a rebuild is already running' });
+    rebuildRunning = true;
+    const script = join(ROOT, 'Rebuild-Deck.ps1');
+    const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true });
+    let out = '';
+    ps.stdout.on('data', (d) => (out += d));
+    ps.stderr.on('data', (d) => (out += d));
+    ps.on('error', (e) => { rebuildRunning = false; if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+    ps.on('close', (code) => {
+      rebuildRunning = false;
+      console.log(`[admin] rebuild-deck exited ${code}`);
+      if (res.headersSent) return;
+      if (code === 0) res.json({ ok: true, log: out.slice(-1500) });
+      else res.status(500).json({ ok: false, error: `rebuild exited ${code}`, log: out.slice(-1500) });
+    });
   });
 
   app.post('/api/crest', (req, res) => {

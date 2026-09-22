@@ -43,6 +43,10 @@ const DEFAULTS = {
   },
   timings: {
     countdownSeconds: 3,
+    // After the countdown, switch to the clean camera scene and wait this long
+    // (covers OBS's scene transition) before StartRecord, so the countdown
+    // overlay never appears in the recorded file.
+    recordStartDelayMs: 450,
     maxRecordSeconds: 240, // safety auto-stop if nobody presses STOP
     reviewTimeoutSeconds: 90, // walk-away in review -> keep take, go READY
     thanksSeconds: 4,
@@ -78,9 +82,22 @@ const DEFAULTS = {
     weddingDate: 'the twelfth of June, two thousand twenty-seven',
     monogram: 'A J',
     hashtag: '#AlexAndJordan',
-    invite: 'Leave a message for the newlyweds',
+    invite: 'Leave a message for the newlyweds', // ATTRACT welcome kicker
     promptIntro: 'Need an idea? Try one of these',
     freeform: '…or record any message you like',
+    // On-screen text for each screen (all editable in /admin). In the cue
+    // fields, wrap the button word in braces, e.g. "Press {START} to begin".
+    readyKicker: 'The Confessional',
+    readyHeadline: 'Find your light, get comfortable',
+    readyCue: "Press {START} when you're ready",
+    attractCue: 'Press {Start} to begin',
+    reviewKicker: 'How did that feel?',
+    keepLabel: 'Keep it',
+    keepHint: 'Press Approve',
+    redoLabel: 'Start over',
+    redoHint: 'Press Start Over',
+    thanksKicker: 'With love',
+    thanksHeadline: 'Thank you',
     thanksMessage: 'Your message means the world to us',
     palette: {
       bg: '#12100e',

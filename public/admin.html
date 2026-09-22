@@ -66,11 +66,37 @@
       <div class="field"><label>Prompt intro</label><input type="text" id="promptIntro" placeholder="Need an idea? Try one of these" /></div>
       <div class="field"><label>"Record anything" line (blank to hide)</label><input type="text" id="freeform" placeholder="…or record any message you like" /></div>
     </div>
-    <div class="field"><label>Thank-you line</label><input type="text" id="thanksMessage" placeholder="Your message means the world to us" /></div>
+    <div class="field"><label>Thank-you line (under "Thank you")</label><input type="text" id="thanksMessage" placeholder="Your message means the world to us" /></div>
   </div>
 
   <div class="card">
-    <h2>Questions <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:400">(first 2&ndash;3 show on the get-ready & countdown screens)</span></h2>
+    <h2>Screen Text</h2>
+    <div class="row">
+      <div class="field"><label>Ready &mdash; small heading</label><input type="text" id="readyKicker" placeholder="The Confessional" /></div>
+      <div class="field"><label>Ready &mdash; headline</label><input type="text" id="readyHeadline" placeholder="Find your light, get comfortable" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Ready &mdash; button cue</label><input type="text" id="readyCue" placeholder="Press {START} when you're ready" /></div>
+      <div class="field"><label>Attract &mdash; button cue</label><input type="text" id="attractCue" placeholder="Press {Start} to begin" /></div>
+    </div>
+    <div class="hint" style="margin:-6px 0 14px">Wrap the button word in braces to draw it as a key, e.g. <code>Press {START} to begin</code>.</div>
+    <div class="field"><label>Review &mdash; heading</label><input type="text" id="reviewKicker" placeholder="How did that feel?" /></div>
+    <div class="row">
+      <div class="field"><label>Review &mdash; keep label</label><input type="text" id="keepLabel" placeholder="Keep it" /></div>
+      <div class="field"><label>Review &mdash; keep hint</label><input type="text" id="keepHint" placeholder="Press Approve" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Review &mdash; redo label</label><input type="text" id="redoLabel" placeholder="Start over" /></div>
+      <div class="field"><label>Review &mdash; redo hint</label><input type="text" id="redoHint" placeholder="Press Start Over" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Thank-you &mdash; small heading</label><input type="text" id="thanksKicker" placeholder="With love" /></div>
+      <div class="field"><label>Thank-you &mdash; headline</label><input type="text" id="thanksHeadline" placeholder="Thank you" /></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Questions <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:400">(2 are shown at random on the get-ready &amp; countdown screens &mdash; add several for variety)</span></h2>
     <div id="prompts"></div>
     <button class="btn ghost sm" id="addPrompt" type="button">+ Add question</button>
   </div>
@@ -96,6 +122,13 @@
       </div>
     </div>
   </div>
+
+  <div class="card">
+    <h2>Stream Deck</h2>
+    <p class="hint" style="margin:0 0 14px">The deck buttons don't change per wedding, but the corner crest does. After uploading a new crest, rebuild the deck to update it. Companion restarts and the deck reconnects (~30s).</p>
+    <button class="btn ghost" id="rebuildDeck" type="button">Rebuild Stream Deck</button>
+    <span id="deckStatus" class="hint" style="margin-left:14px"></span>
+  </div>
 </main>
 
 <div class="savebar">
@@ -107,6 +140,9 @@
 <script>
   const $ = (s) => document.querySelector(s);
   const PALETTE_KEYS = ['bg','panel','ink','muted','gold','accent'];
+  const TEXT_KEYS = ['coupleNames','weddingDate','hashtag','invite','promptIntro','freeform','thanksMessage',
+    'readyKicker','readyHeadline','readyCue','attractCue','reviewKicker','keepLabel','keepHint','redoLabel','redoHint',
+    'thanksKicker','thanksHeadline','headingFont','bodyFont'];
   let branding = {};
 
   function setStatus(msg, cls='') { const el=$('#status'); el.textContent=msg; el.className='status '+cls; }
@@ -134,15 +170,7 @@
     try {
       const cfg = await (await fetch('/api/config')).json();
       branding = cfg.branding || {};
-      $('#coupleNames').value = branding.coupleNames || '';
-      $('#weddingDate').value = branding.weddingDate || '';
-      $('#hashtag').value = branding.hashtag || '';
-      $('#invite').value = branding.invite || '';
-      $('#promptIntro').value = branding.promptIntro || '';
-      $('#freeform').value = branding.freeform || '';
-      $('#thanksMessage').value = branding.thanksMessage || '';
-      $('#headingFont').value = branding.headingFont || '';
-      $('#bodyFont').value = branding.bodyFont || '';
+      for (const k of TEXT_KEYS) { const el = document.getElementById(k); if (el) el.value = branding[k] || ''; }
       renderColors(branding.palette || {});
       renderPrompts(cfg.prompts || []);
       $('#crestFill').style.setProperty('--m', `url(${branding.crest || 'crest.svg'}?v=${Date.now()})`);
@@ -154,18 +182,8 @@
     const palette = {};
     document.querySelectorAll('#colors input[type=color]').forEach(i => palette[i.dataset.k] = i.value);
     const prompts = [...document.querySelectorAll('#prompts input')].map(i => i.value.trim()).filter(Boolean);
-    const b = { ...branding,
-      coupleNames: $('#coupleNames').value.trim(),
-      weddingDate: $('#weddingDate').value.trim(),
-      hashtag: $('#hashtag').value.trim(),
-      invite: $('#invite').value.trim(),
-      promptIntro: $('#promptIntro').value.trim(),
-      freeform: $('#freeform').value.trim(),
-      thanksMessage: $('#thanksMessage').value.trim(),
-      headingFont: $('#headingFont').value.trim(),
-      bodyFont: $('#bodyFont').value.trim(),
-      palette,
-    };
+    const b = { ...branding, palette };
+    for (const k of TEXT_KEYS) { const el = document.getElementById(k); if (el) b[k] = el.value.trim(); }
     return { branding: b, prompts };
   }
 
@@ -192,6 +210,18 @@
       $('#crestFill').style.setProperty('--m', `url(crest.svg?v=${j.crestVersion})`);
       $('#crestStatus').textContent = 'Crest updated on the display. Run Rebuild-Deck.ps1 to update the Stream Deck too.';
     } catch (e2) { $('#crestStatus').textContent = 'Upload failed: '+e2.message; }
+  };
+
+  $('#rebuildDeck').onclick = async () => {
+    const el = $('#deckStatus'); el.textContent = 'Rebuilding deck… Companion restarts (~30s), please wait.';
+    $('#rebuildDeck').disabled = true;
+    try {
+      const r = await fetch('/api/rebuild-deck', { method: 'POST' });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'failed');
+      el.textContent = 'Deck rebuilt. If the physical deck stays blank, open Companion → Surfaces → Rescan USB.';
+    } catch (e) { el.textContent = 'Rebuild failed: ' + e.message; }
+    $('#rebuildDeck').disabled = false;
   };
 
   load();
