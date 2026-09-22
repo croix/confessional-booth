@@ -71,8 +71,8 @@
   body[data-state="READY"] .textscrim,
   body[data-state="ATTRACT"] .textscrim,
   body[data-state="REVIEW"] .textscrim { opacity: 1; }
-  body[data-state="COUNTDOWN"] .lowerscrim,
-  body[data-state="RECORDING"] .lowerscrim { opacity: 1; }
+  body[data-state="READY"] .lowerscrim,
+  body[data-state="COUNTDOWN"] .lowerscrim { opacity: 1; }
 
   /* Thin gold corner rules */
   .frame { position: fixed; inset: 46px; z-index: 4; pointer-events: none; }
@@ -130,17 +130,21 @@
 
   /* Prompt lower-third */
   .lower {
-    position: fixed; left: 0; right: 0; bottom: 92px; z-index: 6;
+    position: fixed; left: 0; right: 0; bottom: 74px; z-index: 6;
     display: flex; flex-direction: column; align-items: center; text-align: center;
-    padding: 0 10vw; opacity: 0; transition: opacity .5s ease;
+    padding: 0 5vw; opacity: 0; transition: opacity .5s ease;
   }
-  .lower .plabel { font-family: var(--body); letter-spacing:.4em; text-transform:uppercase; font-size:13px; color:var(--gold); margin-bottom:14px; }
-  .lower .prompt {
+  .lower .plabel { font-family: var(--body); letter-spacing:.4em; text-transform:uppercase; font-size:14px; color:var(--gold); }
+  .lower .prompts { display: flex; justify-content: center; align-items: center; margin-top: 18px; }
+  .lower .prompts .q {
+    flex: 0 1 auto; max-width: 28ch;
     font-family: var(--heading); font-style: italic; font-weight: 500;
-    font-size: 52px; line-height: 1.12; color: var(--ink);
+    font-size: 46px; line-height: 1.14; color: var(--ink);
     text-shadow: 0 2px 24px rgba(0,0,0,.65);
-    max-width: 20ch;
+    padding: 0 46px;
   }
+  .lower .prompts .q + .q { border-left: 1px solid rgba(201,169,97,.4); }
+  .lower .freeform { margin-top: 20px; font-family: var(--heading); font-style: italic; font-size: 32px; color: var(--muted); }
 
   /* REC pill */
   .rec {
@@ -215,8 +219,10 @@
   body[data-state="READY"] .datefoot,
   body[data-state="THANKS"] .datefoot { opacity: 1; }
   body[data-state="THANKS"] .thanksscrim { opacity: 1; }
-  body[data-state="COUNTDOWN"] .lower.prompted,
-  body[data-state="RECORDING"] .lower.prompted { opacity: 1; }
+  /* Prompts show while getting ready + during the countdown, but NOT while
+     recording, so the questions never appear in the saved video. */
+  body[data-state="READY"] .lower.prompted,
+  body[data-state="COUNTDOWN"] .lower.prompted { opacity: 1; }
 </style>
 </head>
 <body data-state="READY">
@@ -279,10 +285,11 @@
     <div class="sub" id="thanksSub">Your message means the world to us</div>
   </div>
 
-  <!-- Prompt lower-third (COUNTDOWN + RECORDING) -->
+  <!-- Prompt suggestions (COUNTDOWN + RECORDING) -->
   <div class="lower prompted">
-    <div class="plabel">Your question</div>
-    <div class="prompt" id="prompt">&nbsp;</div>
+    <div class="plabel" id="promptIntro">Need an idea? Try one of these</div>
+    <div class="prompts" id="prompts"></div>
+    <div class="freeform" id="freeform">&hellip;or record any message you like</div>
   </div>
 
   <div class="datefoot">
@@ -297,26 +304,38 @@
   const RING_LEN = 2 * Math.PI * 168;
   $('#ring').style.strokeDasharray = RING_LEN;
 
-  // ---- branding ----
-  async function loadBranding() {
+  // ---- branding (re-applied on a timer so /admin edits go live) ----
+  let crestVer = -1;
+  async function applyBranding() {
     try {
-      const b = await (await fetch('/branding')).json();
+      const b = await (await fetch('/branding', { cache: 'no-store' })).json();
       const p = b.palette || {};
       const r = document.documentElement.style;
-      if (p.bg) r.setProperty('--bg', p.bg);
-      if (p.panel) r.setProperty('--panel', p.panel);
-      if (p.ink) r.setProperty('--ink', p.ink);
-      if (p.muted) r.setProperty('--muted', p.muted);
-      if (p.gold) r.setProperty('--gold', p.gold);
-      if (p.accent) r.setProperty('--accent', p.accent);
+      const setv = (k, v) => { if (v) r.setProperty(k, v); };
+      setv('--bg', p.bg); setv('--panel', p.panel); setv('--ink', p.ink);
+      setv('--muted', p.muted); setv('--gold', p.gold); setv('--accent', p.accent);
       if (b.headingFont) r.setProperty('--heading', `'${b.headingFont}', Georgia, serif`);
       if (b.bodyFont) r.setProperty('--body', `'${b.bodyFont}', system-ui, sans-serif`);
       if (b.coupleNames) { $('#names').textContent = b.coupleNames; $('#attractHead').textContent = b.coupleNames; }
-      if (b.crest) { for (const el of document.querySelectorAll('.crest')) { el.style.webkitMaskImage = `url(${b.crest})`; el.style.maskImage = `url(${b.crest})`; } }
       if (b.invite) $('#attractKicker').textContent = b.invite;
-      if (b.hashtag) $('#hashtag').textContent = b.hashtag; else $('#hashtag').style.display = 'none';
       if (b.thanksMessage) $('#thanksSub').textContent = b.thanksMessage;
-    } catch (e) { /* keep defaults */ }
+      // crest: cache-bust the mask when it changes
+      if (b.crestVersion !== crestVer) {
+        crestVer = b.crestVersion;
+        const url = `url(${b.crest || 'crest.svg'}?v=${crestVer})`;
+        for (const el of document.querySelectorAll('.crest')) { el.style.webkitMaskImage = url; el.style.maskImage = url; }
+      }
+      const intro = $('#promptIntro');
+      if (b.promptIntro) { intro.textContent = b.promptIntro; intro.style.display = ''; } else intro.style.display = 'none';
+      const ff = $('#freeform');
+      if (b.freeform) { ff.innerHTML = b.freeform; ff.style.display = ''; } else ff.style.display = 'none';
+      if (Array.isArray(b.prompts)) {
+        const w = $('#prompts'); w.innerHTML = '';
+        for (const q of b.prompts.slice(0, 3)) { const d = document.createElement('div'); d.className = 'q'; d.textContent = q; w.appendChild(d); }
+      }
+      const ht = $('#hashtag');
+      if (b.hashtag) { ht.textContent = b.hashtag; ht.style.display = ''; } else ht.style.display = 'none';
+    } catch (e) { /* keep current */ }
   }
 
   // ---- state ----
@@ -327,9 +346,6 @@
   }
   function render(s) {
     if (s.state !== cur) { show(s.state); cur = s.state; if (s.state !== 'COUNTDOWN') { maxCount = null; lastNum = null; } }
-    // prompt
-    const promptEl = $('#prompt');
-    if (s.prompt && (s.state === 'COUNTDOWN' || s.state === 'RECORDING')) promptEl.textContent = s.prompt;
     // countdown
     if (s.state === 'COUNTDOWN' && s.countdown != null) {
       if (maxCount == null) maxCount = Math.max(1, s.countdown);
@@ -349,7 +365,8 @@
     try { const s = await (await fetch('/state', { cache: 'no-store' })).json(); render(s); }
     catch (e) { /* controller momentarily unreachable */ }
   }
-  loadBranding();
+  applyBranding();
+  setInterval(applyBranding, 8000);
   poll();
   setInterval(poll, 200);
 </script>

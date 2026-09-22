@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Booth Admin</title>
+<style>
+  :root { --bg:#12100e; --panel:#1b1813; --ink:#f7f2e9; --muted:#c9bda8; --gold:#c9a961; --line:#332e25; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { padding:22px 28px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-family: Georgia, serif; font-weight:500; font-size:22px; margin:0; letter-spacing:.02em; }
+  header h1 span { color:var(--gold); }
+  header .links a { color:var(--muted); text-decoration:none; font-size:13px; margin-left:16px; }
+  header .links a:hover { color:var(--gold); }
+  main { max-width:920px; margin:0 auto; padding:26px 28px 120px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px 24px; margin-bottom:20px; }
+  .card h2 { font-size:13px; letter-spacing:.28em; text-transform:uppercase; color:var(--gold); margin:0 0 18px; font-weight:600; }
+  .row { display:flex; gap:18px; flex-wrap:wrap; }
+  label { display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 6px; }
+  .field { flex:1 1 240px; margin-bottom:16px; }
+  input[type=text] { width:100%; background:#0f0d0b; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:11px 12px; font-size:15px; font-family:inherit; }
+  input[type=text]:focus { outline:none; border-color:var(--gold); }
+  .colors { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px,1fr)); gap:14px; }
+  .swatch { display:flex; align-items:center; gap:10px; }
+  .swatch input[type=color] { width:44px; height:36px; border:1px solid var(--line); border-radius:8px; background:#0f0d0b; padding:2px; }
+  .swatch .cap { font-size:12px; color:var(--muted); text-transform:capitalize; }
+  #prompts .prow { display:flex; gap:10px; margin-bottom:10px; }
+  #prompts .prow input { flex:1; }
+  .btn { background:var(--gold); color:#12100e; border:none; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; }
+  .btn.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  .btn.sm { padding:8px 12px; font-size:13px; }
+  .btn:hover { filter:brightness(1.06); }
+  .savebar { position:fixed; left:0; right:0; bottom:0; background:rgba(18,16,14,.96); border-top:1px solid var(--line); padding:14px 28px; display:flex; align-items:center; gap:16px; justify-content:flex-end; }
+  .savebar .status { margin-right:auto; font-size:14px; color:var(--muted); }
+  .savebar .status.ok { color:#7fca7f; } .savebar .status.err { color:#e08a8a; }
+  .crestprev { display:flex; align-items:center; gap:16px; }
+  .crestprev .box { width:96px; height:96px; border:1px solid var(--line); border-radius:10px; background:#0f0d0b; -webkit-mask:none; }
+  .crestprev .box .fill { width:100%; height:100%; background:var(--gold); -webkit-mask:var(--m) center/contain no-repeat; mask:var(--m) center/contain no-repeat; }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  a.inline { color:var(--gold); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Confessional Booth <span>&mdash; Admin</span></h1>
+  <div class="links">
+    <a href="/display" target="_blank">Open display &nearr;</a>
+    <a href="/state" target="_blank">Status</a>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <h2>The Couple</h2>
+    <div class="row">
+      <div class="field"><label>Couple names</label><input type="text" id="coupleNames" placeholder="Erik & James" /></div>
+      <div class="field"><label>Wedding date (kept on file)</label><input type="text" id="weddingDate" placeholder="November 14, 2026" /></div>
+      <div class="field"><label>Hashtag (blank to hide)</label><input type="text" id="hashtag" placeholder="#ErikAndJames" /></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Messaging</h2>
+    <div class="field"><label>Welcome line (attract screen)</label><input type="text" id="invite" placeholder="Leave a message for the newlyweds" /></div>
+    <div class="row">
+      <div class="field"><label>Prompt intro</label><input type="text" id="promptIntro" placeholder="Need an idea? Try one of these" /></div>
+      <div class="field"><label>"Record anything" line (blank to hide)</label><input type="text" id="freeform" placeholder="…or record any message you like" /></div>
+    </div>
+    <div class="field"><label>Thank-you line</label><input type="text" id="thanksMessage" placeholder="Your message means the world to us" /></div>
+  </div>
+
+  <div class="card">
+    <h2>Questions <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:400">(first 2&ndash;3 show on the get-ready & countdown screens)</span></h2>
+    <div id="prompts"></div>
+    <button class="btn ghost sm" id="addPrompt" type="button">+ Add question</button>
+  </div>
+
+  <div class="card">
+    <h2>Colors</h2>
+    <div class="colors" id="colors"></div>
+    <div class="row" style="margin-top:16px">
+      <div class="field"><label>Heading font (Google Fonts name)</label><input type="text" id="headingFont" placeholder="Cormorant Garamond" /></div>
+      <div class="field"><label>Body font (Google Fonts name)</label><input type="text" id="bodyFont" placeholder="Montserrat" /></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Crest</h2>
+    <div class="crestprev">
+      <div class="box"><div class="fill" id="crestFill"></div></div>
+      <div>
+        <input type="file" id="crestFile" accept=".svg,image/svg+xml" />
+        <div class="hint">Upload an <strong>SVG</strong>. It's tinted to your gold on the display automatically.<br>
+          The Stream Deck crest updates when you run <code>Rebuild-Deck.ps1</code>.</div>
+        <div id="crestStatus" class="hint"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="savebar">
+  <div class="status" id="status">Loading…</div>
+  <a class="btn ghost" href="/display" target="_blank">Preview display</a>
+  <button class="btn" id="save" type="button">Save changes</button>
+</div>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const PALETTE_KEYS = ['bg','panel','ink','muted','gold','accent'];
+  let branding = {};
+
+  function setStatus(msg, cls='') { const el=$('#status'); el.textContent=msg; el.className='status '+cls; }
+
+  function renderColors(pal) {
+    const wrap = $('#colors'); wrap.innerHTML='';
+    for (const k of PALETTE_KEYS) {
+      const div = document.createElement('div'); div.className='swatch';
+      div.innerHTML = `<input type="color" data-k="${k}" value="${pal[k]||'#000000'}"><span class="cap">${k}</span>`;
+      wrap.appendChild(div);
+    }
+  }
+  function renderPrompts(list) {
+    const wrap = $('#prompts'); wrap.innerHTML='';
+    (list && list.length ? list : ['']).forEach(addPromptRow);
+  }
+  function addPromptRow(val='') {
+    const row = document.createElement('div'); row.className='prow';
+    row.innerHTML = `<input type="text" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="A question to prompt guests"><button class="btn ghost sm" type="button">✕</button>`;
+    row.querySelector('button').onclick = () => row.remove();
+    $('#prompts').appendChild(row);
+  }
+
+  async function load() {
+    try {
+      const cfg = await (await fetch('/api/config')).json();
+      branding = cfg.branding || {};
+      $('#coupleNames').value = branding.coupleNames || '';
+      $('#weddingDate').value = branding.weddingDate || '';
+      $('#hashtag').value = branding.hashtag || '';
+      $('#invite').value = branding.invite || '';
+      $('#promptIntro').value = branding.promptIntro || '';
+      $('#freeform').value = branding.freeform || '';
+      $('#thanksMessage').value = branding.thanksMessage || '';
+      $('#headingFont').value = branding.headingFont || '';
+      $('#bodyFont').value = branding.bodyFont || '';
+      renderColors(branding.palette || {});
+      renderPrompts(cfg.prompts || []);
+      $('#crestFill').style.setProperty('--m', `url(${branding.crest || 'crest.svg'}?v=${Date.now()})`);
+      setStatus('Ready.');
+    } catch (e) { setStatus('Failed to load config: '+e.message, 'err'); }
+  }
+
+  function gather() {
+    const palette = {};
+    document.querySelectorAll('#colors input[type=color]').forEach(i => palette[i.dataset.k] = i.value);
+    const prompts = [...document.querySelectorAll('#prompts input')].map(i => i.value.trim()).filter(Boolean);
+    const b = { ...branding,
+      coupleNames: $('#coupleNames').value.trim(),
+      weddingDate: $('#weddingDate').value.trim(),
+      hashtag: $('#hashtag').value.trim(),
+      invite: $('#invite').value.trim(),
+      promptIntro: $('#promptIntro').value.trim(),
+      freeform: $('#freeform').value.trim(),
+      thanksMessage: $('#thanksMessage').value.trim(),
+      headingFont: $('#headingFont').value.trim(),
+      bodyFont: $('#bodyFont').value.trim(),
+      palette,
+    };
+    return { branding: b, prompts };
+  }
+
+  $('#addPrompt').onclick = () => addPromptRow('');
+  $('#save').onclick = async () => {
+    setStatus('Saving…');
+    try {
+      const r = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gather()) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error||'save failed');
+      branding = gather().branding;
+      setStatus('Saved — the display updates within a few seconds.', 'ok');
+    } catch (e) { setStatus('Save failed: '+e.message, 'err'); }
+  };
+
+  $('#crestFile').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const svg = await f.text();
+    $('#crestStatus').textContent = 'Uploading…';
+    try {
+      const r = await fetch('/api/crest', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ svg }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error||'upload failed');
+      $('#crestFill').style.setProperty('--m', `url(crest.svg?v=${j.crestVersion})`);
+      $('#crestStatus').textContent = 'Crest updated on the display. Run Rebuild-Deck.ps1 to update the Stream Deck too.';
+    } catch (e2) { $('#crestStatus').textContent = 'Upload failed: '+e2.message; }
+  };
+
+  load();
+</script>
+</body>
+</html>

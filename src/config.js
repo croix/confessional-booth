@@ -79,6 +79,8 @@ const DEFAULTS = {
     monogram: 'A J',
     hashtag: '#AlexAndJordan',
     invite: 'Leave a message for the newlyweds',
+    promptIntro: 'Need an idea? Try one of these',
+    freeform: '…or record any message you like',
     thanksMessage: 'Your message means the world to us',
     palette: {
       bg: '#12100e',
