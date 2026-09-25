@@ -34,10 +34,24 @@ function Ctrl-Up  { [bool](Get-CimInstance Win32_Process -Filter "Name='node.exe
 function WS-Up    { Test-NetConnection -ComputerName 127.0.0.1 -Port 4455 -WarningAction SilentlyContinue -InformationLevel Quiet }
 
 function Start-OBS {
-  Start-Process -FilePath $ObsExe -ArgumentList @('--disable-shutdown-check','--disable-updater','--minimize-to-tray') -WorkingDirectory $ObsDir
+  # No --minimize-to-tray: the operator wants OBS visible on the operator screen.
+  Start-Process -FilePath $ObsExe -ArgumentList @('--disable-shutdown-check','--disable-updater') -WorkingDirectory $ObsDir
   for ($i=0; $i -lt 30 -and -not (WS-Up); $i++) { Start-Sleep 1 }
 }
 function Start-Companion { if (-not (Comp-Up)) { Start-Process -FilePath $CompExe; Start-Sleep 6 } }
+
+# Only ONE Companion may run — two instances fight over the USB Stream Deck and
+# it ends up blank/offline. Keep the oldest, kill any duplicates.
+function Ensure-SingleCompanion {
+  $mains = @(Get-CimInstance Win32_Process -Filter "Name='Companion.exe'" |
+    Where-Object { $_.CommandLine -notlike '*--type=*' } | Sort-Object CreationDate)
+  if ($mains.Count -gt 1) {
+    Send-Alert "Found $($mains.Count) Companion instances - killing duplicates (they fight over the Stream Deck)." 'default' 'wastebasket'
+    foreach ($m in $mains[1..($mains.Count-1)]) { try { Stop-Process -Id $m.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
+  }
+}
+# Open the manager (admin) page in the default browser on the operator screen.
+function Open-Manager { Start-Process "http://127.0.0.1:$Port/admin" }
 function Start-Controller {
   Start-Process -FilePath 'node' -ArgumentList 'src\index.js' -WorkingDirectory $Proj -WindowStyle Hidden `
     -RedirectStandardOutput (Join-Path $LogDir 'controller.out.log') -RedirectStandardError (Join-Path $LogDir 'controller.err.log')
@@ -48,9 +62,11 @@ function Open-Projector { & node (Join-Path $Proj 'scripts\open-projector.mjs') 
 Write-Host '=== Booth supervisor starting ==='
 if (-not (OBS-Up))  { Write-Host 'launching OBS...';        Start-OBS }        else { for ($i=0; $i -lt 30 -and -not (WS-Up); $i++){ Start-Sleep 1 } }
 if (-not (Comp-Up)) { Write-Host 'launching Companion...';  Start-Companion }
+Ensure-SingleCompanion
 if (-not (Ctrl-Up)) { Write-Host 'launching controller...'; Start-Controller }
 Start-Sleep 3
-Open-Projector
+Open-Projector          # booth output fullscreen on the booth monitor
+Open-Manager            # admin page in the browser on the operator screen
 Send-Alert 'Booth is online and running.' 'default' 'white_check_mark'
 
 $lastDiskAlert = (Get-Date).AddHours(-1)
@@ -59,6 +75,7 @@ while ($true) {
   try {
     if (-not (OBS-Up))  { Send-Alert 'OBS crashed - restarting.'; Start-OBS; Start-Sleep 3; Open-Projector }
     if (-not (Comp-Up)) { Send-Alert 'Companion crashed - restarting (deck may need a USB rescan).'; Start-Companion }
+    Ensure-SingleCompanion
     if (-not (Ctrl-Up)) { Send-Alert 'Booth controller crashed - restarting.'; Start-Controller }
     # disk space on the recordings drive
     $drive = (Get-Item (Join-Path $Proj 'recordings')).PSDrive.Name
