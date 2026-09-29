@@ -17,6 +17,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $cfg       = Get-Content (Join-Path $Proj 'config.json') -Raw | ConvertFrom-Json
 $NotifyUrl = $cfg.notify.url
 $Port      = $cfg.server.port
+$CompUrl   = if ($cfg.companion.baseUrl) { $cfg.companion.baseUrl.TrimEnd('/') } else { 'http://127.0.0.1:8888' }
 $DiskMinGB = 15
 
 function Send-Alert($msg, $priority = 'high', $tags = 'rotating_light') {
@@ -52,6 +53,11 @@ function Ensure-SingleCompanion {
 }
 # Open the manager (admin) page in the default browser on the operator screen.
 function Open-Manager { Start-Process "http://127.0.0.1:$Port/admin" }
+
+# Ask Companion to rescan for USB surfaces. This is a no-op when the Stream Deck
+# is already connected, but re-grabs it within one loop after it's been unplugged
+# and plugged back in (Companion's own hotplug watch is unreliable on Windows).
+function Rescan-Deck { try { Invoke-RestMethod -Uri "$CompUrl/api/surfaces/rescan" -Method Post -TimeoutSec 5 | Out-Null } catch {} }
 function Start-Controller {
   Start-Process -FilePath 'node' -ArgumentList 'src\index.js' -WorkingDirectory $Proj -WindowStyle Hidden `
     -RedirectStandardOutput (Join-Path $LogDir 'controller.out.log') -RedirectStandardError (Join-Path $LogDir 'controller.err.log')
@@ -67,6 +73,7 @@ if (-not (Ctrl-Up)) { Write-Host 'launching controller...'; Start-Controller }
 Start-Sleep 3
 Open-Projector          # booth output fullscreen on the booth monitor
 Open-Manager            # admin page in the browser on the operator screen
+Rescan-Deck             # make sure Companion has grabbed the Stream Deck
 Send-Alert 'Booth is online and running.' 'default' 'white_check_mark'
 
 $lastDiskAlert = (Get-Date).AddHours(-1)
@@ -76,6 +83,7 @@ while ($true) {
     if (-not (OBS-Up))  { Send-Alert 'OBS crashed - restarting.'; Start-OBS; Start-Sleep 3; Open-Projector }
     if (-not (Comp-Up)) { Send-Alert 'Companion crashed - restarting (deck may need a USB rescan).'; Start-Companion }
     Ensure-SingleCompanion
+    if (Comp-Up) { Rescan-Deck }  # auto-recover the Stream Deck if it was unplugged
     if (-not (Ctrl-Up)) { Send-Alert 'Booth controller crashed - restarting.'; Start-Controller }
     # disk space on the recordings drive
     $drive = (Get-Item (Join-Path $Proj 'recordings')).PSDrive.Name
