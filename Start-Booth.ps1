@@ -10,7 +10,6 @@ $Proj      = 'C:\Users\DFWStreaming\Projects\confessional-booth'
 $ObsExe    = 'C:\Program Files\obs-studio\bin\64bit\obs64.exe'
 $ObsDir    = 'C:\Program Files\obs-studio\bin\64bit'
 $CompExe   = 'C:\Program Files\Companion\Companion.exe'
-$MonitorIx = 1                 # booth display (0 = operator/primary)
 $LogDir    = Join-Path $Proj 'logs'
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
@@ -63,7 +62,9 @@ function Start-Controller {
     -RedirectStandardOutput (Join-Path $LogDir 'controller.out.log') -RedirectStandardError (Join-Path $LogDir 'controller.err.log')
   Start-Sleep 3
 }
-function Open-Projector { & node (Join-Path $Proj 'scripts\open-projector.mjs') $MonitorIx 2>$null }
+# No monitor index here — open-projector.mjs reads display.projectorMonitor from
+# config.json ('auto' picks the guest/non-primary screen, robust across venues).
+function Open-Projector { & node (Join-Path $Proj 'scripts\open-projector.mjs') 2>$null }
 
 Write-Host '=== Booth supervisor starting ==='
 if (-not (OBS-Up))  { Write-Host 'launching OBS...';        Start-OBS }        else { for ($i=0; $i -lt 30 -and -not (WS-Up); $i++){ Start-Sleep 1 } }

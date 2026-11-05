@@ -19,6 +19,15 @@ const DEFAULTS = {
     host: '127.0.0.1',
     port: 3939,
   },
+  display: {
+    // Which monitor the guest's full-screen preview opens on.
+    //   'auto'   pick the non-primary (guest) display automatically — robust
+    //            when the room/monitors change (OBS and Windows can disagree on
+    //            monitor order, so a fixed index is fragile).
+    //   <number> force a specific OBS monitor index (0-based).
+    //   -1       windowed projector.
+    projectorMonitor: 'auto',
+  },
   recordings: {
     // Base folder OBS records into (approved/bloopers live under it). Leave null
     // to use <project>/recordings.
