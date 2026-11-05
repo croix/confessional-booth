@@ -223,6 +223,17 @@
      recording, so the questions never appear in the saved video. */
   body[data-state="READY"] .lower.prompted,
   body[data-state="COUNTDOWN"] .lower.prompted { opacity: 1; }
+
+  /* While RECORDING, the crest + names shrink into a small watermark tucked in
+     the bottom-right corner (out of the guest's face and baked into the file),
+     instead of the full-size top-centre branding used on the other screens. */
+  body[data-state="RECORDING"] .topbar {
+    top: auto; left: auto; bottom: 48px; right: 64px;
+    flex-direction: row; align-items: center; gap: 16px;
+    text-shadow: 0 2px 16px rgba(0,0,0,.7);
+  }
+  body[data-state="RECORDING"] .crest.sm { height: 84px; }
+  body[data-state="RECORDING"] .names { font-size: 30px; opacity: .92; }
 </style>
 </head>
 <body data-state="READY">
