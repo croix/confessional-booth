@@ -17,6 +17,9 @@
     --accent: #7c6a52;
     --heading: 'Cormorant Garamond', Georgia, serif;
     --body: 'Montserrat', system-ui, sans-serif;
+    /* Tight dark halo so the light text + crest stay readable over light
+       clothing, blonde hair or a bright background (not just dark scenes). */
+    --halo: 0 0 3px rgba(0,0,0,.85), 0 1px 2px rgba(0,0,0,.9), 0 2px 12px rgba(0,0,0,.5);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -230,10 +233,19 @@
   body[data-state="RECORDING"] .topbar {
     top: auto; left: auto; bottom: 48px; right: 64px;
     flex-direction: row; align-items: center; gap: 16px;
-    text-shadow: 0 2px 16px rgba(0,0,0,.7);
+    text-shadow: var(--halo);
   }
   body[data-state="RECORDING"] .crest.sm { height: 84px; }
   body[data-state="RECORDING"] .names { font-size: 30px; opacity: .92; }
+
+  /* Keep every light overlay element legible over any background (light
+     clothing, blonde hair, bright rooms), not just dark scenes. */
+  .names, .name-lg, .kicker, .headline, .sub, .cue,
+  .lower .plabel, .lower .prompts .q, .lower .freeform,
+  .hashtag, .countnum, .choice .verb, .choice .hint {
+    text-shadow: var(--halo);
+  }
+  .crest { filter: drop-shadow(0 2px 7px rgba(0,0,0,.55)); }
 </style>
 </head>
 <body data-state="READY">
