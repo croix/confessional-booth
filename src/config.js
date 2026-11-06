@@ -27,6 +27,10 @@ const DEFAULTS = {
     //   <number> force a specific OBS monitor index (0-based).
     //   -1       windowed projector.
     projectorMonitor: 'auto',
+    // Host/IP for the venue-montage URL shown in /admin. Leave blank to
+    // auto-detect the real LAN adapter (skips the ATEM's USB link); set it only
+    // to force a specific address when auto-detect guesses wrong.
+    montageHost: '',
   },
   recordings: {
     // Base folder OBS records into (approved/bloopers live under it). Leave null

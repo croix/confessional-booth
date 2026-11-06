@@ -138,16 +138,36 @@ export function makeMontage(cfg) {
     await fsp.unlink(join(photosDir, safe));
   }
 
-  // Best-guess LAN IPv4 so the admin can show the URL to open on the TVs.
-  function lanHost() {
-    const ifaces = networkInterfaces();
-    for (const list of Object.values(ifaces)) {
+  // Virtual / non-LAN adapters to skip when guessing the montage host. The ATEM
+  // presents a USB-NCM network link (bogus MAC 02:00:00:00:00:00, 172.26.45.x)
+  // that the TVs can't reach — it must not win over the real Wi-Fi/Ethernet.
+  const VIRTUAL_MAC = new Set(['02:00:00:00:00:00', '00:00:00:00:00:00']);
+  const VIRTUAL_NAME = /vethernet|virtualbox|vmware|hyper-?v|loopback|bluetooth|npcap|wsl|default switch|\btap\b|tailscale|zerotier|radmin|hamachi/i;
+
+  // All usable LAN IPv4s, real adapters first, virtual/USB links last.
+  function lanCandidates() {
+    const out = [];
+    for (const [name, list] of Object.entries(networkInterfaces())) {
       for (const i of list || []) {
-        if (i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.')) return i.address;
+        const fam = i.family === 'IPv4' || i.family === 4;
+        if (!fam || i.internal || i.address.startsWith('169.254.')) continue;
+        const virtual = VIRTUAL_MAC.has((i.mac || '').toLowerCase()) || VIRTUAL_NAME.test(name);
+        out.push({ name, address: i.address, virtual });
       }
     }
-    return null;
+    out.sort((a, b) => (a.virtual === b.virtual ? 0 : a.virtual ? 1 : -1));
+    return out;
   }
 
-  return { prepareClip, prepareAll, rebuildAll, listMedia, savePhoto, deletePhoto, lanHost, videosDir, photosDir };
+  // The LAN IPv4 the TVs should use. config.display.montageHost overrides the
+  // auto-pick for venues where detection guesses wrong.
+  function lanHost() {
+    const override = ((cfg.display && cfg.display.montageHost) || '').trim();
+    if (override) return override;
+    const c = lanCandidates();
+    const best = c.find((x) => !x.virtual) || c[0];
+    return best ? best.address : null;
+  }
+
+  return { prepareClip, prepareAll, rebuildAll, listMedia, savePhoto, deletePhoto, lanHost, lanCandidates, videosDir, photosDir };
 }

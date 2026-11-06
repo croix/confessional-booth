@@ -181,6 +181,7 @@
     <div style="margin-top:18px">
       <label>Montage URL for the TVs</label>
       <div class="urlbox"><span id="mUrl">&mdash;</span><a class="btn ghost sm" id="mOpen" href="/montage" target="_blank" style="margin-left:auto;white-space:nowrap">Open</a></div>
+      <div class="hint" id="mCandidates" style="margin-top:8px"></div>
       <div class="hint" style="margin-top:8px">Videos are prepared automatically on approval.
         <a class="inline" href="#" id="mRebuild">Rebuild all clips</a> if you just enabled this, changed the audio setting, or added keepers directly.
         <span id="mRebuildStatus"></span></div>
@@ -334,6 +335,11 @@
       $('#mGap').value = (s.videoGapPhotos == null ? 1 : s.videoGapPhotos);
       $('#mUrl').textContent = m.lanUrl || (location.origin + '/montage');
       $('#mOpen').href = m.lanUrl || '/montage';
+      const cands = m.lanCandidates || [], el = $('#mCandidates');
+      const others = cands.filter(c => c.url !== m.lanUrl);
+      el.innerHTML = others.length
+        ? 'Other addresses on this machine: ' + others.map(c => `<a class="inline" href="${c.url}" target="_blank">${c.address}</a>${c.virtual ? ' <span style="opacity:.55">(ATEM/virtual — skip)</span>' : ''}`).join(' &middot; ') + '. If a TV can’t reach the one above, use the address on its network.'
+        : '';
       renderMontagePhotos(m.photos || []);
     } catch (e) { $('#mStatus').textContent = 'Could not load montage: ' + e.message; }
   }
@@ -385,6 +391,7 @@
 
   load();
   loadMontage();
+  setInterval(loadMontage, 10000); // track network changes / newly approved clips
 </script>
 </body>
 </html>

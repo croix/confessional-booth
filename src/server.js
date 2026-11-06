@@ -123,6 +123,9 @@ export function startServer(cfg, booth, montage) {
         videos: videos.map((f) => '/montage-media/videos/' + encodeURIComponent(f)),
         photos: photos.map((f) => ({ name: f, url: '/montage-media/photos/' + encodeURIComponent(f) })),
         lanUrl: montage && montage.lanHost() ? `http://${montage.lanHost()}:${cfg.server.port}/montage` : null,
+        // all reachable LAN IPs (real adapters first) so the admin can offer a
+        // pick if auto-detect guesses wrong (e.g. multiple networks).
+        lanCandidates: montage ? montage.lanCandidates().map((c) => ({ ...c, url: `http://${c.address}:${cfg.server.port}/montage` })) : [],
       });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
