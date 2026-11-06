@@ -15,7 +15,15 @@ const obs = new OBS(cfg);
 const booth = new Booth(cfg, obs, notify, setVar);
 const montage = makeMontage(cfg);
 
-obs.on('open', () => booth.onObsReady());
+obs.on('open', () => {
+  booth.onObsReady();
+  // On a cold boot OBS starts before our web server, so the "Overlay" browser
+  // source loads /display and gets connection-refused (blank branding). Now that
+  // we're connected (and the server is already listening), reload it. Also
+  // re-asserts the overlay after any OBS reconnect.
+  if (cfg.sources.overlay)
+    setTimeout(() => obs.refreshBrowserSource(cfg.sources.overlay).catch(() => {}), 2000);
+});
 obs.on('close', () => booth.onObsClosed());
 
 // Prepare a venue MP4 whenever a take is approved (fire-and-forget, queued).

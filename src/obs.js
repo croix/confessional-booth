@@ -96,6 +96,12 @@ export class OBS extends EventEmitter {
     });
   }
 
+  // Reload a browser source (its "Refresh (no cache)" button). Needed after a
+  // cold boot where the source loaded its URL before our web server was up.
+  refreshBrowserSource(inputName) {
+    return this.call('PressInputPropertiesButton', { inputName, propertyName: 'refreshnocache' });
+  }
+
   // Grab a tiny screenshot of a source and return its average brightness
   // (0-255). Used by the watchdog to catch a dead/black camera feed.
   async screenshotBrightness(sourceName) {

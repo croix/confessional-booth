@@ -67,6 +67,7 @@ const DEFAULTS = {
     countdownText: 'txt_countdown',
     promptText: 'txt_prompt',
     reviewMedia: 'mediaReview', // a Media Source on the REVIEW scene
+    overlay: 'Overlay', // the browser source pointed at /display (branding)
   },
   timings: {
     countdownSeconds: 3,
