@@ -34,6 +34,10 @@ function Ctrl-Up  { [bool](Get-CimInstance Win32_Process -Filter "Name='node.exe
 function WS-Up    { Test-NetConnection -ComputerName 127.0.0.1 -Port 4455 -WarningAction SilentlyContinue -InformationLevel Quiet }
 
 function Start-OBS {
+  # Clear OBS's safe-mode sentinel so an unclean prior exit (crash or our
+  # force-kill on restart) doesn't pop the blocking "Safe Mode?" dialog, which
+  # never auto-dismisses and would strand the booth unattended.
+  try { Remove-Item -Recurse -Force (Join-Path $env:APPDATA 'obs-studio\.sentinel') -ErrorAction SilentlyContinue } catch {}
   # No --minimize-to-tray: the operator wants OBS visible on the operator screen.
   Start-Process -FilePath $ObsExe -ArgumentList @('--disable-shutdown-check','--disable-updater') -WorkingDirectory $ObsDir
   for ($i=0; $i -lt 30 -and -not (WS-Up); $i++) { Start-Sleep 1 }

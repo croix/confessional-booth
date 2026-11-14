@@ -1,3 +1,5 @@
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadConfig } from './config.js';
 import { makeNotifier } from './notify.js';
 import { makeCompanion } from './companion.js';
@@ -6,6 +8,16 @@ import { Booth } from './booth.js';
 import { startServer } from './server.js';
 import { startWatchdog } from './watchdog.js';
 import { makeMontage } from './montage.js';
+
+// Remove OBS's safe-mode sentinel. OBS drops a marker here on launch and clears
+// it on a clean exit; a leftover marker makes the NEXT launch pop a blocking
+// "Safe Mode?" dialog that never auto-dismisses — fatal for an unattended booth.
+// We wipe it while OBS is running so a crash/force-kill leaves nothing behind.
+function clearObsSentinel() {
+  const appdata = process.env.APPDATA;
+  if (!appdata) return;
+  try { rmSync(join(appdata, 'obs-studio', '.sentinel'), { recursive: true, force: true }); } catch {}
+}
 
 const cfg = loadConfig();
 const notify = makeNotifier(cfg);
@@ -17,6 +29,7 @@ const montage = makeMontage(cfg);
 
 obs.on('open', () => {
   booth.onObsReady();
+  clearObsSentinel(); // so a later crash won't block the relaunch on Safe Mode
   // On a cold boot OBS starts before our web server, so the "Overlay" browser
   // source loads /display and gets connection-refused (blank branding). Now that
   // we're connected (and the server is already listening), reload it. Also
